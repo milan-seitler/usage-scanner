@@ -18,58 +18,40 @@ type SummaryRow = {
 };
 
 export function ProjectSummaryTable({ rows }: { rows: SummaryRow[] }) {
-  const visibleRows = rows.slice(0, 3);
-
   return (
-    <div className="space-y-4">
-      <Table className="min-w-[900px]">
-        <TableHeader>
-          <TableRow>
-            <TableHead className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Project</TableHead>
-            <TableHead className="w-[180px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Source</TableHead>
-            <TableHead className="w-[140px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Activity</TableHead>
-            <TableHead className="w-[120px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tokens</TableHead>
-            <TableHead className="w-[120px] text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Detail</TableHead>
+    <Table className="min-w-[900px]">
+      <TableHeader>
+        <TableRow>
+          <TableHead className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Project</TableHead>
+          <TableHead className="w-[180px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Source</TableHead>
+          <TableHead className="w-[140px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Activity</TableHead>
+          <TableHead className="w-[120px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tokens</TableHead>
+          <TableHead className="w-[120px] text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Detail</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.slug}>
+            <TableCell className="font-medium text-foreground">{row.name}</TableCell>
+            <TableCell>
+              <Badge variant="outline" className="font-normal text-muted-foreground">
+                {compactSourceLabel(row.sources)}
+              </Badge>
+            </TableCell>
+            <TableCell>
+              <div className="text-sm text-muted-foreground">{row.promptCount} prompts</div>
+            </TableCell>
+            <TableCell className="text-sm text-muted-foreground">{formatCompactTokens(row.totalTokens)}</TableCell>
+            <TableCell className="text-right">
+              <Button href={`/project/${row.slug}`} variant="outline" size="sm" className="gap-2">
+                Open
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </TableCell>
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleRows.map((row) => (
-            <TableRow key={row.slug}>
-              <TableCell className="font-medium text-foreground">{row.name}</TableCell>
-              <TableCell>
-                <Badge variant="outline" className="max-w-[160px] truncate font-normal text-muted-foreground">
-                  {compactSourceLabel(row.sources)}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div className="text-sm text-muted-foreground">{row.promptCount} prompts</div>
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">{formatCompactTokens(row.totalTokens)}</TableCell>
-              <TableCell className="text-right">
-                <Button href={`/project/${row.slug}`} variant="outline" size="sm" className="gap-2">
-                  Open
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>Showing {visibleRows.length} projects</span>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled>
-            Previous
-          </Button>
-          <Button variant="outline" size="sm">
-            1
-          </Button>
-          <Button variant="outline" size="sm" disabled>
-            Next
-          </Button>
-        </div>
-      </div>
-    </div>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 

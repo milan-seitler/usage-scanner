@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { LayoutDashboard, ScanSearch, Sparkles, Waypoints } from "lucide-react";
+import { LayoutDashboard, ScanSearch } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -42,17 +41,6 @@ export function AppShell({
 
           <div className="space-y-1 px-3 py-4">
             <NavItem href="/" icon={LayoutDashboard} label="Dashboard" active={section === "dashboard"} />
-            <NavGhost icon={Waypoints} label="Project Drilldowns" active={section === "project"} />
-            <NavGhost icon={Sparkles} label="Prompt Timelines" active={section === "prompt"} />
-          </div>
-
-          <div className="px-5 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Live sources</p>
-            <div className="mt-3 space-y-2 text-sm">
-              <SourceChip label="Codex sessions" />
-              <SourceChip label="Cursor workspaceStorage" />
-              <SourceChip label="Git history" />
-            </div>
           </div>
 
           <div className="mt-auto border-t border-border px-5 py-5">
@@ -112,37 +100,5 @@ function NavItem({
       <Icon className="h-4 w-4" />
       {label}
     </Link>
-  );
-}
-
-function NavGhost({
-  icon: Icon,
-  label,
-  active
-}: {
-  icon: typeof LayoutDashboard;
-  label: string;
-  active?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        buttonVariants({ variant: "ghost", size: "sm" }),
-        "w-full justify-start gap-3 px-3 text-sm font-medium",
-        active ? "bg-muted/70 text-foreground hover:bg-muted/70" : "text-muted-foreground"
-      )}
-    >
-      <Icon className="h-4 w-4" />
-      {label}
-    </div>
-  );
-}
-
-function SourceChip({ label }: { label: string }) {
-  return (
-    <Badge variant="outline" className="justify-start gap-2 rounded-md px-3 py-2 text-sm font-normal">
-      <span className="h-2 w-2 rounded-full bg-accent" />
-      {label}
-    </Badge>
   );
 }

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
+import { TokenBarChart } from "@/components/dashboard-token-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,8 +10,17 @@ import { getProject, getProjects, getPromptDetail } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectPage({ params }: { params: Promise<{ slug: string }> }) {
+type PromptSortKey = "date-desc" | "date-asc" | "tokens-desc" | "tokens-asc";
+
+export default async function ProjectPage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ sort?: string }>;
+}) {
   const { slug } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const project = getProject(slug);
   const repoCount = getProjects().length;
 
@@ -18,10 +28,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     notFound();
   }
 
+  const sort = normalizePromptSort(resolvedSearchParams?.sort);
   const tokenTotal = project.prompts.reduce((sum, prompt) => sum + (prompt.totalTokens ?? 0), 0);
-  const linkedCommits = project.commits.filter((commit) => commit.linkedPromptIds.length > 0).length;
   const bestSource = project.scannerSources.some((source) => source.toLowerCase().includes("codex")) ? "Codex" : "Cursor";
-  const promptRows = project.prompts.slice(0, 3).map((prompt) => {
+  const latestPrompt = project.prompts[0];
+  const tokenChartData = buildDailyTokenChart(project.prompts);
+  const promptRows = project.prompts.map((prompt) => {
     const detail = getPromptDetail(project.slug, prompt.id);
     const lastEventTs = detail?.codexDetail?.events.at(-1)?.timestamp;
 
@@ -29,11 +41,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       id: prompt.id,
       title: prompt.title,
       source: shortSource(prompt.source),
+      startedAt: prompt.startedAt,
       started: formatAbsoluteDate(prompt.startedAt),
       lastEdit: lastEventTs ? formatRelativeTime(lastEventTs) : "n/a",
+      tokensValue: prompt.totalTokens ?? -1,
       tokens: prompt.totalTokens != null ? formatCompactTokens(prompt.totalTokens) : "n/a"
     };
-  });
+  }).sort((a, b) => comparePromptRows(a, b, sort));
 
   return (
     <AppShell eyebrow="Project Drill-down" title={project.name} section="project" repoCount={repoCount}>
@@ -58,15 +72,37 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <PlainStatCard label="Known tokens" value={formatCompactTokens(tokenTotal)} meta="codex" />
         <PlainStatCard label="Prompt sessions" value={String(project.prompts.length)} meta="all" />
-        <PlainStatCard label="Linked commits" value={String(linkedCommits)} meta="shipped" />
+        <PlainStatCard label="Latest prompt" value={latestPrompt ? formatAbsoluteDate(latestPrompt.startedAt) : "n/a"} meta="activity" />
         <PlainStatCard label="Best source" value={bestSource} meta="rich" />
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
+      <section className="grid gap-6">
         <Card className="border-border bg-white shadow-none">
-          <CardHeader>
-            <CardTitle>Prompt sessions</CardTitle>
-            <CardDescription>Recovered sessions from local logs and IDE history for this repository.</CardDescription>
+          <CardHeader className="pb-4">
+            <CardTitle>Token consumption</CardTitle>
+            <CardDescription>Known input and output tokens across this project&apos;s recovered prompt sessions.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {tokenChartData.some((point) => point.inputTokens > 0 || point.outputTokens > 0) ? (
+              <TokenBarChart data={tokenChartData} className="h-[200px]" />
+            ) : (
+              <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                Token totals are not available for the recovered sessions in this project.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border bg-white shadow-none">
+          <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <CardTitle>Prompt sessions</CardTitle>
+              <CardDescription>Recovered sessions from local logs and IDE history for this repository.</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <SortButton slug={project.slug} currentSort={sort} family="date" targetSort={nextSort(sort, "date")} label={sortLabel(sort, "date")} />
+              <SortButton slug={project.slug} currentSort={sort} family="tokens" targetSort={nextSort(sort, "tokens")} label={sortLabel(sort, "tokens")} />
+            </div>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="space-y-4">
@@ -75,16 +111,18 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
                   <TableRow>
                     <TableHead>Prompt</TableHead>
                     <TableHead className="w-[150px]">Source</TableHead>
-                    <TableHead className="w-[140px]">Started</TableHead>
+                    <TableHead className="w-[140px]">Date</TableHead>
                     <TableHead className="w-[120px]">Last edit</TableHead>
-                    <TableHead className="w-[120px]">Tokens</TableHead>
+                    <TableHead className="w-[120px]">Tokens consumed</TableHead>
                     <TableHead className="w-[120px] text-right">Detail</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {promptRows.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell className="font-medium text-foreground">{row.title}</TableCell>
+                      <TableCell className="max-w-[34rem]">
+                        <p className="line-clamp-2 text-sm font-medium text-foreground">{row.title}</p>
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline">{row.source}</Badge>
                       </TableCell>
@@ -100,46 +138,37 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
                   ))}
                 </TableBody>
               </Table>
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>Showing {promptRows.length} prompt sessions</span>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled>
-                    Previous
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    1
-                  </Button>
-                  <Button variant="outline" size="sm" disabled>
-                    Next
-                  </Button>
-                </div>
-              </div>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border bg-white shadow-none">
-          <CardHeader>
-            <CardTitle>Commit correlation</CardTitle>
-            <CardDescription>Recent commits linked back to the nearby prompt activity.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-0 pt-0">
-            {project.commits.slice(0, 2).map((commit, index) => (
-              <div
-                key={commit.id}
-                className={index === 0 ? "border-b border-border py-3" : "py-3"}
-              >
-                <p className="text-sm font-medium text-foreground">{commit.message}</p>
-                <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  <span>{commit.branch}</span>
-                  <span>+{commit.insertions} / -{commit.deletions}</span>
-                </div>
-              </div>
-            ))}
           </CardContent>
         </Card>
       </section>
     </AppShell>
+  );
+}
+
+function SortButton({
+  slug,
+  currentSort,
+  family,
+  targetSort,
+  label
+}: {
+  slug: string;
+  currentSort: PromptSortKey;
+  family: "date" | "tokens";
+  targetSort: PromptSortKey;
+  label: string;
+}) {
+  const active = currentSort.startsWith(family);
+
+  return (
+    <Button
+      href={`/project/${slug}?sort=${targetSort}`}
+      variant={active ? "default" : "outline"}
+      size="sm"
+    >
+      {label}
+    </Button>
   );
 }
 
@@ -178,6 +207,35 @@ function formatRelativeTime(value: string) {
   return `${diffDays}d ago`;
 }
 
+function formatPromptChartDate(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric"
+  }).format(new Date(value));
+}
+
+function buildDailyTokenChart(
+  prompts: Array<{ startedAt: string; inputTokens: number | null; outputTokens: number | null }>
+) {
+  const bucket = new Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number }>();
+
+  prompts.forEach((prompt) => {
+    const dateKey = prompt.startedAt.slice(0, 10);
+    const current = bucket.get(dateKey) ?? {
+      date: formatPromptChartDate(prompt.startedAt),
+      isoDate: dateKey,
+      inputTokens: 0,
+      outputTokens: 0
+    };
+
+    current.inputTokens += prompt.inputTokens ?? 0;
+    current.outputTokens += prompt.outputTokens ?? 0;
+    bucket.set(dateKey, current);
+  });
+
+  return fillDailyChartGaps(bucket);
+}
+
 function formatCompactTokens(value: number) {
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
@@ -193,4 +251,77 @@ function sourceLabel(source: string) {
   if (source.toLowerCase().includes("codex")) return "Codex sessions";
   if (source.toLowerCase().includes("cursor")) return "Cursor metadata";
   return "Git correlation";
+}
+
+function normalizePromptSort(value?: string): PromptSortKey {
+  if (value === "date-asc" || value === "tokens-desc" || value === "tokens-asc") {
+    return value;
+  }
+
+  return "date-desc";
+}
+
+function comparePromptRows(
+  a: { startedAt: string; tokensValue: number },
+  b: { startedAt: string; tokensValue: number },
+  sort: PromptSortKey
+) {
+  if (sort === "date-asc") {
+    return a.startedAt.localeCompare(b.startedAt);
+  }
+
+  if (sort === "tokens-desc") {
+    return b.tokensValue - a.tokensValue || b.startedAt.localeCompare(a.startedAt);
+  }
+
+  if (sort === "tokens-asc") {
+    return a.tokensValue - b.tokensValue || b.startedAt.localeCompare(a.startedAt);
+  }
+
+  return b.startedAt.localeCompare(a.startedAt);
+}
+
+function nextSort(currentSort: PromptSortKey, family: "date" | "tokens"): PromptSortKey {
+  if (family === "date") {
+    return currentSort === "date-desc" ? "date-asc" : "date-desc";
+  }
+
+  return currentSort === "tokens-desc" ? "tokens-asc" : "tokens-desc";
+}
+
+function sortLabel(currentSort: PromptSortKey, family: "date" | "tokens") {
+  const active = currentSort.startsWith(family);
+  const direction = active ? activeSortDirection(currentSort) : "desc";
+  const title = family === "date" ? "Date" : "Tokens";
+  return `${title} ${direction === "asc" ? "↑" : "↓"}`;
+}
+
+function activeSortDirection(sort: PromptSortKey) {
+  return sort.endsWith("asc") ? "asc" : "desc";
+}
+
+function fillDailyChartGaps(bucket: Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number }>) {
+  const keys = Array.from(bucket.keys()).sort((a, b) => a.localeCompare(b));
+  if (keys.length === 0) {
+    return [];
+  }
+
+  const days: Array<{ date: string; isoDate: string; inputTokens: number; outputTokens: number }> = [];
+  let current = new Date(`${keys[0]}T00:00:00Z`);
+  const end = new Date(`${keys[keys.length - 1]}T00:00:00Z`);
+
+  while (current <= end) {
+    const isoDate = current.toISOString().slice(0, 10);
+    days.push(
+      bucket.get(isoDate) ?? {
+        date: formatPromptChartDate(isoDate),
+        isoDate,
+        inputTokens: 0,
+        outputTokens: 0
+      }
+    );
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return days;
 }

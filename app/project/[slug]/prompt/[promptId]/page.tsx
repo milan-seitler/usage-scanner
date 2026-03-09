@@ -321,7 +321,7 @@ function LegacyTimelineRow({ event }: { event: PromptEvent }) {
           <Badge variant={meta.badgeVariant}>{meta.label}</Badge>
           <p className="text-xs font-medium text-foreground">{formatTime(event.timestamp)}</p>
         </div>
-        <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">{meta.preview}</p>
+        <p className="mt-3 text-sm text-muted-foreground">{meta.preview}</p>
       </summary>
       <div className="border-t border-border px-4 py-4">{renderEventContent(event)}</div>
     </details>
@@ -371,10 +371,10 @@ function EmptyState({ text }: { text: string }) {
 function getEventMeta(event: PromptEvent) {
   if (event.kind === "message") {
     return {
-      title: truncate(event.text, 72),
+      title: event.text,
       label: "message",
       badgeVariant: "secondary" as const,
-      preview: truncate(event.text, 180)
+      preview: event.text
     };
   }
 
@@ -383,7 +383,7 @@ function getEventMeta(event: PromptEvent) {
       title: `Assistant emits ${event.toolName}`,
       label: "tool_call",
       badgeVariant: "outline" as const,
-      preview: truncate(event.argumentsText || "No arguments captured", 180)
+      preview: event.argumentsText || "No arguments captured"
     };
   }
 
@@ -392,7 +392,7 @@ function getEventMeta(event: PromptEvent) {
       title: `Tool output from ${event.toolName}`,
       label: "tool_output",
       badgeVariant: "outline" as const,
-      preview: truncate(event.outputText || "No output captured", 180)
+      preview: event.outputText || "No output captured"
     };
   }
 
@@ -421,8 +421,4 @@ function formatCompactTokens(value: number) {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
   if (value >= 1_000) return `${Math.round(value / 100) / 10}K`;
   return value.toString();
-}
-
-function truncate(value: string, max: number) {
-  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }

@@ -59,9 +59,11 @@ export function ChartTooltipContent({
   active,
   payload,
   label,
-  formatter
+  formatter,
+  labelFormatter
 }: TooltipProps<number, string> & {
   hideLabel?: boolean;
+  labelFormatter?: (label: string, payload?: TooltipProps<number, string>["payload"]) => React.ReactNode;
 }) {
   const { config } = useChart();
 
@@ -71,7 +73,7 @@ export function ChartTooltipContent({
 
   return (
     <div className="grid min-w-[180px] gap-2 rounded-lg border bg-background/95 p-3 text-sm shadow-xl">
-      <div className="font-medium text-foreground">{label}</div>
+      <div className="font-medium text-foreground">{labelFormatter ? labelFormatter(String(label ?? ""), payload) : label}</div>
       <div className="grid gap-1.5">
         {payload.map((item) => {
           const key = item.dataKey?.toString() ?? item.name?.toString() ?? "value";

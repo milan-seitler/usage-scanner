@@ -215,7 +215,7 @@ export function getProjectSummary(): ProjectSummary[] {
 }
 
 export function getDailyTimeline() {
-  const bucket = new Map<string, { date: string; inputTokens: number; outputTokens: number }>();
+  const bucket = new Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number }>();
 
   getProjects().forEach((project) => {
     project.prompts.forEach((prompt) => {
@@ -224,14 +224,14 @@ export function getDailyTimeline() {
       }
 
       const date = prompt.startedAt.slice(0, 10);
-      const current = bucket.get(date) ?? { date, inputTokens: 0, outputTokens: 0 };
+      const current = bucket.get(date) ?? { date, isoDate: date, inputTokens: 0, outputTokens: 0 };
       current.inputTokens += prompt.inputTokens ?? 0;
       current.outputTokens += prompt.outputTokens ?? 0;
       bucket.set(date, current);
     });
   });
 
-  return Array.from(bucket.values()).sort((a, b) => a.date.localeCompare(b.date));
+  return fillDailyTokenGaps(bucket);
 }
 
 export function getPromptDetail(projectSlug: string, promptId: string) {
@@ -482,6 +482,32 @@ function formatCompactTokenCount(value: number) {
   if (value >= 1_000_000) return `${Math.round((value / 1_000_000) * 10) / 10}M`;
   if (value >= 1_000) return `${Math.round(value / 1000)}K`;
   return String(value);
+}
+
+function fillDailyTokenGaps(bucket: Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number }>) {
+  const keys = Array.from(bucket.keys()).sort((a, b) => a.localeCompare(b));
+  if (keys.length === 0) {
+    return [];
+  }
+
+  const days: Array<{ date: string; isoDate: string; inputTokens: number; outputTokens: number }> = [];
+  let current = new Date(`${keys[0]}T00:00:00Z`);
+  const end = new Date(`${keys[keys.length - 1]}T00:00:00Z`);
+
+  while (current <= end) {
+    const isoDate = current.toISOString().slice(0, 10);
+    days.push(
+      bucket.get(isoDate) ?? {
+        date: isoDate,
+        isoDate,
+        inputTokens: 0,
+        outputTokens: 0
+      }
+    );
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return days;
 }
 
 function scanCursorWorkspaces(projectMap: Map<string, MutableProject>) {
