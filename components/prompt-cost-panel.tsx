@@ -24,11 +24,11 @@ export function PromptCostPanel({ data }: { data: PromptCostPoint[] }) {
   const [metric, setMetric] = React.useState<UsageMetric>("price");
 
   return (
-    <Card className="border-border bg-white shadow-none">
+    <Card className="border-border bg-card shadow-none">
       <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <CardTitle>Usage</CardTitle>
         <div className="flex flex-wrap items-center gap-3 md:justify-end">
-          <div className="inline-flex w-fit rounded-lg border border-border bg-slate-50 p-1">
+          <div className="inline-flex w-fit rounded-lg border border-border bg-muted p-1">
             <Button type="button" variant={metric === "price" ? "default" : "ghost"} size="sm" onClick={() => setMetric("price")}>
               Cost
             </Button>
@@ -36,7 +36,7 @@ export function PromptCostPanel({ data }: { data: PromptCostPoint[] }) {
               Tokens
             </Button>
           </div>
-          <div className="inline-flex w-fit rounded-lg border border-border bg-slate-50 p-1">
+          <div className="inline-flex w-fit rounded-lg border border-border bg-muted p-1">
             <Button type="button" variant={mode === "prompt" ? "default" : "ghost"} size="sm" onClick={() => setMode("prompt")}>
               Per prompt
             </Button>

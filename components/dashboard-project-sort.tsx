@@ -14,7 +14,7 @@ export function DashboardProjectSort({ initialSort }: { initialSort: DashboardSo
     <div className="relative">
       <select
         aria-label="Sort projects"
-        className="h-10 appearance-none rounded-lg border border-border bg-white pl-3 pr-11 text-sm text-foreground shadow-sm outline-none"
+        className="h-10 appearance-none rounded-lg border border-border bg-card pl-3 pr-11 text-sm text-foreground shadow-sm outline-none"
         defaultValue={initialSort}
         onChange={(event) => {
           const params = new URLSearchParams(searchParams.toString());

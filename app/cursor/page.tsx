@@ -24,7 +24,7 @@ export default async function CursorStatsPage() {
 
       {data.error ? (
         <section>
-          <Card className="border-border bg-white shadow-none">
+          <Card className="border-border bg-card shadow-none">
             <CardHeader>
               <CardTitle>{data.configured ? "Cursor API unavailable" : "Cursor API not configured"}</CardTitle>
               <CardDescription>
@@ -40,7 +40,7 @@ export default async function CursorStatsPage() {
       ) : null}
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card className="border-border bg-white shadow-none">
+        <Card className="border-border bg-card shadow-none">
           <CardHeader>
             <CardTitle>Users</CardTitle>
             <CardDescription>Top spenders across the last {data.lookbackDays} days.</CardDescription>
@@ -56,10 +56,10 @@ export default async function CursorStatsPage() {
                     <TableHead className="w-[120px]">Models</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                  <TableBody>
                   {data.users.slice(0, 12).map((row) => (
                     <TableRow key={row.userEmail}>
-                      <TableCell className="font-medium text-foreground">{row.userEmail}</TableCell>
+                      <TableCell className="font-medium text-foreground">{maskEmail(row.userEmail)}</TableCell>
                       <TableCell>{formatUsd(row.costUsd)}</TableCell>
                       <TableCell>{formatInteger(row.requests)}</TableCell>
                       <TableCell>{formatInteger(row.models)}</TableCell>
@@ -73,7 +73,7 @@ export default async function CursorStatsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-border bg-white shadow-none">
+        <Card className="border-border bg-card shadow-none">
           <CardHeader>
             <CardTitle>Models</CardTitle>
             <CardDescription>Spend and request volume by Cursor model.</CardDescription>
@@ -108,7 +108,7 @@ export default async function CursorStatsPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <Card className="border-border bg-white shadow-none">
+        <Card className="border-border bg-card shadow-none">
           <CardHeader>
             <CardTitle>Daily usage</CardTitle>
             <CardDescription>Cost and request volume for the current lookback window.</CardDescription>
@@ -139,7 +139,7 @@ export default async function CursorStatsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-border bg-white shadow-none">
+        <Card className="border-border bg-card shadow-none">
           <CardHeader>
             <CardTitle>Recent events</CardTitle>
             <CardDescription>
@@ -163,7 +163,7 @@ export default async function CursorStatsPage() {
                   {data.events.slice(0, 20).map((event) => (
                     <TableRow key={event.id}>
                       <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{formatDateTime(event.timestamp)}</TableCell>
-                      <TableCell className="max-w-[16rem] truncate font-medium text-foreground">{event.userEmail}</TableCell>
+                      <TableCell className="max-w-[16rem] truncate font-medium text-foreground">{maskEmail(event.userEmail)}</TableCell>
                       <TableCell>{event.model}</TableCell>
                       <TableCell className="text-muted-foreground">{event.kind}</TableCell>
                       <TableCell>{formatUsd(event.requestCostUsd)}</TableCell>
@@ -184,7 +184,7 @@ export default async function CursorStatsPage() {
 
 function MetricCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Card className="border-border bg-white shadow-none">
+    <Card className="border-border bg-card shadow-none">
       <CardHeader className="gap-1 pb-5">
         <CardDescription className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</CardDescription>
         <CardTitle className="text-2xl">{value}</CardTitle>
@@ -209,4 +209,16 @@ function formatDateTime(value: string) {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(value));
+}
+
+function maskEmail(value: string) {
+  const [localPart, domain] = value.split("@");
+  if (!localPart || !domain) {
+    return value.length <= 4 ? "hidden" : `${value.slice(0, 2)}***`;
+  }
+
+  const maskedLocal = localPart.length <= 2 ? `${localPart[0] ?? "*"}*` : `${localPart.slice(0, 2)}***`;
+  const [domainName, ...rest] = domain.split(".");
+  const maskedDomain = domainName.length <= 1 ? "*" : `${domainName[0]}***`;
+  return `${maskedLocal}@${[maskedDomain, ...rest].join(".")}`;
 }

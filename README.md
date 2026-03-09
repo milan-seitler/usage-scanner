@@ -1,56 +1,46 @@
 # Repo Scanner
 
-`repo-scanner` is a small local dashboard for reconstructing AI assistant usage by project.
+`repo-scanner` is a local dashboard for reconstructing AI assistant usage by project, currently focused on Codex workflows.
+
+It is designed for localhost use against sensitive machine-local traces. By default the app now blocks non-local requests unless you explicitly opt out with `REPO_SCANNER_ALLOW_REMOTE=true`.
 
 It scans local machine traces, groups them by repository, and lets you drill down from:
 
 1. project spend and activity
 2. prompt/session detail
-3. correlated Git commits
+3. project-level usage breakdowns
 
-## What it reads
+## Data sources
 
-The current app reads from:
+The app reads from local machine traces:
 
-- Codex session logs in `~/.codex/sessions` and `~/.codex/archived_sessions`
-- Cursor workspace history in `~/Library/Application Support/Cursor/User/workspaceStorage`
-- Git repositories under `/Users/your-name/Developer/Projects`
+- Codex session logs under the configured Codex home
+- Cursor workspace history under the configured Cursor workspace storage root
+- Git repositories under the configured projects root
+
+Current focus:
+
+- the main product flow is Codex-first
+- the most exercised and validated path in the app is the Codex ingestion, project dashboard, and prompt-detail experience
 
 Optional:
 
-- Cursor Admin API usage events for a hidden `Cursor Stats` scaffold when `CURSOR_ADMIN_API_KEY` is configured
+- Cursor Admin API usage events for an experimental `Cursor Stats` scaffold when `CURSOR_ADMIN_API_KEY` is configured
 
-## Current behavior
+## Features
 
 - Project dashboard with known token totals and source visibility
-- Project drill-down with prompt and commit correlation
+- Project drill-down with prompt history and usage summaries
 - Prompt detail page with Codex event timelines
-- Commit detail page showing the prompt sessions linked to a commit
 - Prompt detail grouped view that rolls up one user prompt into a single execution episode
 - Project and dashboard tables with token breakdown tooltips, pricing columns, and direct row navigation
 - Token usage charts with simple time-range controls
 
-Notes:
+Experimental:
 
-- Codex currently provides the richest local detail, including transcript events, tool calls, tool outputs, and token checkpoints.
-- Cursor currently contributes prompt history on this machine, but not equivalent token/event depth.
+- `Cursor Stats` exists as a hidden scaffold and is not part of the main verified product flow yet
 
-## Pricing
-
-Prompt and session pricing is estimated locally from recovered usage snapshots.
-
-Current pricing coverage includes:
-
-- `GPT-5.4`
-- `GPT-5.3-Codex`
-- `GPT-5.2`
-- `GPT-5.2-Codex`
-- `GPT-5.1-Codex`
-- `GPT-5.1-Codex-Max`
-- `GPT-5.1-Codex-Mini`
-- generic `Codex` fallback
-
-Pricing is calculated as:
+Prompt and session pricing is estimated locally from recovered usage snapshots:
 
 ```text
 uncached_input * input_rate
@@ -58,34 +48,67 @@ uncached_input * input_rate
 + output * output_rate
 ```
 
-Important:
+## Prerequisites
 
-- `cached input` is a subset of `input`, not an additional bucket on top of input
-- `session total` is derived from `input + output`
-- cost estimates only use profiles that have been mapped locally in `lib/pricing.ts`
+- Node.js 20+ and npm
+- `git` on your `PATH`
+- `sqlite3` on your `PATH` for Cursor workspace ingestion
+- A machine that already has local Git repos plus Codex and/or Cursor traces to scan
+
+Tested path defaults are macOS-oriented:
+
+- `~/Developer/Projects`
+- `~/.codex`
+- `~/Library/Application Support/Cursor/User/workspaceStorage`
+
+If your machine uses different roots, override them in `.env.local`.
 
 ## Run locally
 
-Optional env for `Cursor Stats`:
+1. Copy the example environment file:
 
 ```bash
-export CURSOR_ADMIN_API_KEY=...
-export CURSOR_TEAM_ID=...
-export CURSOR_STATS_LOOKBACK_DAYS=30
+cp .env.example .env.local
 ```
 
-Note:
+2. Edit `.env.local` if you need to override the default local scan roots:
 
-- The `Cursor Stats` route is intentionally not linked from the UI yet.
-- It is kept in the codebase as a hidden MVP scaffold and is blocked on a real Cursor Admin API key from a team admin.
+```bash
+REPO_SCANNER_PROJECTS_ROOT=/absolute/path/to/your/repos
+REPO_SCANNER_CODEX_ROOT=/absolute/path/to/your/.codex
+REPO_SCANNER_CURSOR_WORKSPACES=/absolute/path/to/Cursor/User/workspaceStorage
+```
 
-Install dependencies:
+If you keep the default macOS-style folders, you can leave those three variables unset.
+
+3. Keep the app local-only unless you have your own auth boundary in front of it:
+
+```bash
+REPO_SCANNER_ALLOW_REMOTE=false
+```
+
+4. If you want to try the experimental `Cursor Stats` route, also set:
+
+```bash
+CURSOR_ADMIN_API_KEY=...
+CURSOR_TEAM_ID=...
+CURSOR_STATS_LOOKBACK_DAYS=30
+```
+
+`Cursor Stats` note:
+
+- this route is currently experimental
+- it is intentionally not linked from the main UI
+- it should be treated as incomplete until it has dedicated validation against real team data
+- the UI masks user emails, but the underlying data should still be treated as sensitive
+
+5. Install dependencies:
 
 ```bash
 npm install
 ```
 
-Start the production server:
+6. Start the production server:
 
 ```bash
 npm run build
@@ -100,6 +123,35 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Verification
+
+Run the two non-interactive checks before publishing or opening a PR:
+
+```bash
+npm run lint
+npm run build
+```
+
+## First run
+
+If your configured roots do not contain any matching traces yet, the dashboard will load with an empty-state message instead of project rows.
+
+That usually means one of these is true:
+
+- `.env.local` points at the wrong roots
+- the machine does not have local Codex/Cursor traces yet
+- `git` or `sqlite3` is missing from `PATH`
+- the repos you want to scan live outside `REPO_SCANNER_PROJECTS_ROOT`
+
+## Scan Scope And Limits
+
+- Repository discovery only walks one and two directory levels under `REPO_SCANNER_PROJECTS_ROOT`
+- Git history is limited to the last 90 days and at most 40 commits per repo
+- Codex ingestion keeps at most 250 recovered sessions per repo
+- Cursor ingestion keeps at most 120 recovered generations per repo
+
+These limits keep the dashboard responsive, but they also mean missing older data is not always a bug.
+
 ## Tech stack
 
 - Next.js App Router
@@ -111,17 +163,13 @@ Open [http://localhost:3000](http://localhost:3000).
 
 - `app/` route pages
 - `components/` UI and app shell
-- `lib/data.ts` local ingestion and correlation logic
+- `lib/data.ts` local ingestion and data aggregation logic
 
 ## Caveats
 
 - This is a local retrospective scanner, not a hosted analytics product.
 - Data quality depends on what each source leaves behind on disk.
-- Next.js dev mode on this machine has shown occasional stale-cache/runtime issues; `npm run build && npm start` is the most reliable path for verification.
-
-If the dev server starts returning a white screen or missing chunk/module errors after a refactor, the usual recovery path is:
-
-```bash
-rm -rf .next
-npm run dev
-```
+- The app expects machine-specific local paths; configure them through environment variables instead of editing source.
+- Prompt detail pages can surface sensitive transcript and tool-output content from local Codex logs.
+- Do not expose this app to a network without adding your own authentication and transport controls first.
+- None of your local path values or API keys should be committed.

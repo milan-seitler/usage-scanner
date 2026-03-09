@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LayoutDashboard, ScanSearch } from "lucide-react";
 
+import { ThemeToggle } from "@/components/theme-toggle";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -26,15 +27,15 @@ export function AppShell({
   repoCount?: number;
 }) {
   return (
-    <main className={cn("min-h-screen bg-white text-foreground", className)}>
+    <main className={cn("min-h-screen bg-background text-foreground", className)}>
       <div className="flex min-h-screen">
-        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-border bg-white xl:flex xl:flex-col">
+        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-border bg-card xl:flex xl:flex-col">
           <div className="border-b border-border px-5 py-5">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <ScanSearch className="h-5 w-5" />
-            </div>
-            <div>
+                <ScanSearch className="h-5 w-5" />
+              </div>
+              <div>
                 <p className="text-sm font-semibold">Repo Scanner</p>
                 <p className="text-xs text-muted-foreground">Local AI activity overview</p>
               </div>
@@ -43,6 +44,15 @@ export function AppShell({
 
           <div className="space-y-1 px-3 py-4">
             <NavItem href="/" icon={LayoutDashboard} label="Dashboard" active={section === "dashboard"} />
+          </div>
+
+          <div className="mt-auto px-4 py-5">
+            {typeof repoCount === "number" ? (
+              <p className="mb-4 text-center text-xs text-muted-foreground">{repoCount} repos indexed</p>
+            ) : null}
+            <div className="flex justify-center">
+              <ThemeToggle />
+            </div>
           </div>
         </aside>
 

@@ -1,3 +1,11 @@
 .next
 node_modules
 npm-debug.log*
+output
+tsconfig.tsbuildinfo
+.env
+.env.*
+.DS_Store
+design.pen
+INTERNAL.md
+UI_REVIEW_NOTES.md
