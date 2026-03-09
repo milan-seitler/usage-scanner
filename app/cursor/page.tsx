@@ -24,7 +24,7 @@ export default async function CursorStatsPage() {
 
       {data.error ? (
         <section>
-          <Card className="border-border bg-white shadow-none">
+          <Card className="border-border bg-card shadow-none">
             <CardHeader>
               <CardTitle>{data.configured ? "Cursor API unavailable" : "Cursor API not configured"}</CardTitle>
               <CardDescription>
@@ -40,7 +40,7 @@ export default async function CursorStatsPage() {
       ) : null}
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card className="border-border bg-white shadow-none">
+        <Card className="border-border bg-card shadow-none">
           <CardHeader>
             <CardTitle>Users</CardTitle>
             <CardDescription>Top spenders across the last {data.lookbackDays} days.</CardDescription>
@@ -73,7 +73,7 @@ export default async function CursorStatsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-border bg-white shadow-none">
+        <Card className="border-border bg-card shadow-none">
           <CardHeader>
             <CardTitle>Models</CardTitle>
             <CardDescription>Spend and request volume by Cursor model.</CardDescription>
@@ -108,7 +108,7 @@ export default async function CursorStatsPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <Card className="border-border bg-white shadow-none">
+        <Card className="border-border bg-card shadow-none">
           <CardHeader>
             <CardTitle>Daily usage</CardTitle>
             <CardDescription>Cost and request volume for the current lookback window.</CardDescription>
@@ -139,7 +139,7 @@ export default async function CursorStatsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-border bg-white shadow-none">
+        <Card className="border-border bg-card shadow-none">
           <CardHeader>
             <CardTitle>Recent events</CardTitle>
             <CardDescription>
@@ -184,7 +184,7 @@ export default async function CursorStatsPage() {
 
 function MetricCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Card className="border-border bg-white shadow-none">
+    <Card className="border-border bg-card shadow-none">
       <CardHeader className="gap-1 pb-5">
         <CardDescription className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</CardDescription>
         <CardTitle className="text-2xl">{value}</CardTitle>

@@ -1,12 +1,16 @@
 import { cache } from "react";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { estimateUsageCostUsd, resolveTokenPricingProfile } from "@/lib/pricing";
 
-const PROJECTS_ROOT = "/Users/your-name/Developer/Projects";
-const CODEX_ROOT = "/Users/your-name/.codex";
-const CURSOR_WORKSPACES = "/Users/your-name/Library/Application Support/Cursor/User/workspaceStorage";
+const HOME_DIR = os.homedir();
+const PROJECTS_ROOT = path.resolve(process.env.REPO_SCANNER_PROJECTS_ROOT ?? path.join(HOME_DIR, "Developer/Projects"));
+const CODEX_ROOT = path.resolve(process.env.REPO_SCANNER_CODEX_ROOT ?? path.join(HOME_DIR, ".codex"));
+const CURSOR_WORKSPACES = path.resolve(
+  process.env.REPO_SCANNER_CURSOR_WORKSPACES ?? path.join(HOME_DIR, "Library/Application Support/Cursor/User/workspaceStorage")
+);
 const MAX_CODEX_SESSIONS = 250;
 const MAX_CURSOR_GENERATIONS = 120;
 const MAX_GIT_COMMITS = 40;
@@ -309,7 +313,7 @@ function derivePromptEfficiency(events: PromptEvent[]) {
   const checkpoints: PromptTokenCheckpoint[] = [];
   let checkpointTotals = { input: 0, output: 0, total: 0 };
 
-  events.forEach((event) => {
+  events.forEach((event, index) => {
     if (event.kind === "token_count") {
       const deltaInput = Math.max(0, event.inputTokens - checkpointTotals.input);
       const deltaOutput = Math.max(0, event.outputTokens - checkpointTotals.output);
@@ -328,7 +332,7 @@ function derivePromptEfficiency(events: PromptEvent[]) {
       });
 
       items.push({
-        id: `${event.timestamp}-token`,
+        id: `${event.timestamp}-token-${index}`,
         kind: "token_checkpoint",
         title: "Token checkpoint",
         subtitle: "Last request usage with cumulative session total",
@@ -349,7 +353,7 @@ function derivePromptEfficiency(events: PromptEvent[]) {
       return;
     }
 
-    const item = toTimelineItem(event);
+    const item = toTimelineItem(event, index);
     if (item) {
       items.push(item);
     }
@@ -394,11 +398,11 @@ function derivePromptEfficiency(events: PromptEvent[]) {
   };
 }
 
-function toTimelineItem(event: PromptEvent): PromptTimelineItem | null {
+function toTimelineItem(event: PromptEvent, index: number): PromptTimelineItem | null {
   if (event.kind === "message") {
     if (event.role === "user") {
       return {
-        id: `${event.timestamp}-message`,
+        id: `${event.timestamp}-message-${index}`,
         kind: "message",
         title: "User turn",
         subtitle: summarizeText(event.text),
@@ -413,7 +417,7 @@ function toTimelineItem(event: PromptEvent): PromptTimelineItem | null {
     }
 
     return {
-      id: `${event.timestamp}-assistant`,
+      id: `${event.timestamp}-assistant-${index}`,
       kind: "assistant_work",
       title: "Assistant work - message",
       subtitle: inferAssistantSubtitle(event.text),
@@ -429,7 +433,7 @@ function toTimelineItem(event: PromptEvent): PromptTimelineItem | null {
 
   if (event.kind === "tool_call" || event.kind === "tool_output") {
     return {
-      id: `${event.timestamp}-${event.kind}`,
+      id: `${event.timestamp}-${event.kind}-${index}`,
       kind: "assistant_work",
       title: `Assistant work - ${event.kind.replace("_", " ")}`,
       subtitle: classifyToolSubtitle(event.toolName),

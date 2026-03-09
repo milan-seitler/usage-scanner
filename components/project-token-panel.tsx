@@ -21,11 +21,11 @@ export function ProjectTokenPanel({ data, title = "Usage" }: { data: ChartPoint[
   const [metric, setMetric] = React.useState<UsageMetric>("price");
 
   return (
-    <Card className="border-border bg-white shadow-none">
+    <Card className="border-border bg-card shadow-none">
       <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <CardTitle>{title}</CardTitle>
         <div className="flex flex-wrap items-center gap-3 md:justify-end">
-          <div className="inline-flex w-fit rounded-lg border border-border bg-slate-50 p-1">
+          <div className="inline-flex w-fit rounded-lg border border-border bg-muted p-1">
             {(["price", "tokens"] as const).map((option) => (
               <Button
                 key={option}
@@ -38,7 +38,7 @@ export function ProjectTokenPanel({ data, title = "Usage" }: { data: ChartPoint[
               </Button>
             ))}
           </div>
-          <div className="inline-flex w-fit rounded-lg border border-border bg-slate-50 p-1">
+          <div className="inline-flex w-fit rounded-lg border border-border bg-muted p-1">
             {(["7d", "30d", "90d", "all"] as const).map((option) => (
               <Button
                 key={option}

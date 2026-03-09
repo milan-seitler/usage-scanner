@@ -71,7 +71,7 @@ export default async function HomePage({
       </section>
 
       <section>
-        <Card className="border-border bg-white shadow-none">
+        <Card className="border-border bg-card shadow-none">
           <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <CardTitle>Projects</CardTitle>
             <DashboardProjectSort initialSort={sort} />
@@ -87,7 +87,7 @@ export default async function HomePage({
 
 function MetricCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Card className="border-border bg-white shadow-none">
+    <Card className="border-border bg-card shadow-none">
       <CardHeader className="gap-1 pb-5">
         <CardDescription className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</CardDescription>
         <CardTitle className="text-2xl">{value}</CardTitle>
@@ -109,8 +109,8 @@ function TokenSummaryValue({
 }) {
   return (
     <span className="group relative inline-flex">
-      <span className="border-b border-dashed border-slate-400/80 leading-none">{formatCompactTokens(totalTokens)}</span>
-      <span className="pointer-events-none absolute left-0 top-full z-20 mt-3 hidden min-w-[220px] rounded-lg border border-border bg-white p-3 text-left text-sm font-medium text-foreground shadow-xl group-hover:block">
+      <span className="border-b border-dashed border-muted-foreground/70 leading-none">{formatCompactTokens(totalTokens)}</span>
+      <span className="pointer-events-none absolute left-0 top-full z-20 hidden min-w-[220px] rounded-lg border border-border bg-card p-3 text-left text-sm font-medium text-foreground shadow-xl group-hover:block group-hover:top-full group-hover:mt-3">
         <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Token breakdown</span>
         <span className="mt-2 block text-sm text-foreground">{formatCompactTokens(inputTokens)} input</span>
         <span className="mt-1 block text-sm text-foreground">{formatCompactTokens(cachedInputTokens)} cached</span>

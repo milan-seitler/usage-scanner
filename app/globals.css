@@ -23,6 +23,29 @@
   --chart-4: 262 83% 58%;
   --radius: 0.9rem;
   --font-sans: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+
+.dark {
+  --background: 222 47% 8%;
+  --foreground: 210 40% 96%;
+  --card: 222 32% 12%;
+  --card-foreground: 210 40% 96%;
+  --primary: 199 89% 62%;
+  --primary-foreground: 222 47% 10%;
+  --secondary: 222 22% 18%;
+  --secondary-foreground: 210 40% 96%;
+  --muted: 223 24% 16%;
+  --muted-foreground: 215 20% 74%;
+  --accent: 221 70% 58%;
+  --accent-foreground: 210 40% 98%;
+  --border: 222 18% 24%;
+  --ring: 199 89% 62%;
+  --chart-1: 199 89% 62%;
+  --chart-2: 158 64% 52%;
+  --chart-3: 36 94% 63%;
+  --chart-4: 281 89% 74%;
+  color-scheme: dark;
 }
 
 * {
@@ -37,10 +60,21 @@ body {
     linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(244, 247, 251, 0.96));
 }
 
+.dark body {
+  background-image:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 26%),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 24%),
+    linear-gradient(180deg, rgba(12, 18, 32, 0.98), rgba(11, 16, 26, 0.96));
+}
+
 a {
   @apply text-inherit no-underline;
 }
 
 ::selection {
   background: rgba(59, 130, 246, 0.18);
+}
+
+.dark ::selection {
+  background: rgba(56, 189, 248, 0.24);
 }

@@ -29,7 +29,7 @@ export default async function CommitDetailPage({
   return (
     <AppShell eyebrow="Commit Detail" title={commit.message} section="project" repoCount={repoCount}>
       <section className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
-        <Card className="overflow-hidden border-border/70 bg-white/90">
+        <Card className="overflow-hidden border-border/70 bg-card/95">
           <CardHeader className="gap-4 pb-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Link
@@ -64,7 +64,7 @@ export default async function CommitDetailPage({
           </CardContent>
         </Card>
 
-        <Card className="border-border/70 bg-white/85">
+        <Card className="border-border/70 bg-card/90">
           <CardHeader>
             <CardTitle className="text-lg">Commit signal</CardTitle>
             <CardDescription>How much assistant activity fed this change.</CardDescription>
@@ -78,7 +78,7 @@ export default async function CommitDetailPage({
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr]">
-        <Card className="border-border/70 bg-white/90">
+        <Card className="border-border/70 bg-card/95">
           <CardHeader>
             <CardTitle>Commit footprint</CardTitle>
             <CardDescription>What shipped, when it shipped, and how much AI spend fed into it.</CardDescription>
@@ -92,7 +92,7 @@ export default async function CommitDetailPage({
           </CardContent>
         </Card>
 
-        <Card className="border-border/70 bg-white/85">
+        <Card className="border-border/70 bg-card/90">
           <CardHeader>
             <CardTitle>Threads feeding this commit</CardTitle>
             <CardDescription>One commit can aggregate several AI-assisted work sessions.</CardDescription>
@@ -109,7 +109,7 @@ export default async function CommitDetailPage({
               </TableHeader>
               <TableBody>
                 {prompts.map((prompt) => (
-                  <TableRow key={prompt.id} className="bg-white/55">
+                  <TableRow key={prompt.id} className="bg-card/40">
                     <TableCell>
                       <Link className="block space-y-1" href={`/project/${project.slug}/prompt/${prompt.id}`}>
                         <div className="font-medium">{prompt.title}</div>
