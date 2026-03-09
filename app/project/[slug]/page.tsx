@@ -74,6 +74,7 @@ export default async function ProjectPage({
       }
     >
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <PlainStatCard label="Cost" value={formatUsd(totalSpend)} />
         <PlainStatCard
           label="Known tokens"
           value={
@@ -85,8 +86,7 @@ export default async function ProjectPage({
             />
           }
         />
-        <PlainStatCard label="Price" value={formatUsd(totalSpend)} />
-        <PlainStatCard label="Prompt sessions" value={String(project.prompts.length)} />
+        <PlainStatCard label="Threads" value={String(project.prompts.length)} />
       </section>
 
       <section className="grid gap-6">
@@ -99,7 +99,7 @@ export default async function ProjectPage({
         <Card className="border-border bg-white shadow-none">
           <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <CardTitle>Prompt sessions</CardTitle>
+              <CardTitle>Threads</CardTitle>
             </div>
             <ProjectPromptSort initialSort={sort} />
           </CardHeader>
@@ -108,10 +108,10 @@ export default async function ProjectPage({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Prompt</TableHead>
+                    <TableHead>Thread</TableHead>
                     <TableHead className="w-[140px]">Date</TableHead>
                     <TableHead className="w-[120px]">Last edit</TableHead>
-                    <TableHead className="w-[120px]">Price</TableHead>
+                    <TableHead className="w-[120px]">Cost</TableHead>
                     <TableHead className="w-[120px]">Tokens</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -236,9 +236,9 @@ function formatPromptChartDate(value: string) {
 }
 
 function buildDailyTokenChart(
-  prompts: Array<{ startedAt: string; inputTokens: number | null; outputTokens: number | null }>
+  prompts: Array<{ startedAt: string; inputTokens: number | null; outputTokens: number | null; costUsd: number | null }>
 ) {
-  const bucket = new Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number }>();
+  const bucket = new Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number; costUsd: number }>();
 
   prompts.forEach((prompt) => {
     const dateKey = prompt.startedAt.slice(0, 10);
@@ -246,11 +246,13 @@ function buildDailyTokenChart(
       date: formatPromptChartDate(prompt.startedAt),
       isoDate: dateKey,
       inputTokens: 0,
-      outputTokens: 0
+      outputTokens: 0,
+      costUsd: 0
     };
 
     current.inputTokens += prompt.inputTokens ?? 0;
     current.outputTokens += prompt.outputTokens ?? 0;
+    current.costUsd += prompt.costUsd ?? 0;
     bucket.set(dateKey, current);
   });
 
@@ -304,13 +306,13 @@ function comparePromptRows(
   return b.startedAt.localeCompare(a.startedAt);
 }
 
-function fillDailyChartGaps(bucket: Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number }>) {
+function fillDailyChartGaps(bucket: Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number; costUsd: number }>) {
   const keys = Array.from(bucket.keys()).sort((a, b) => a.localeCompare(b));
   if (keys.length === 0) {
     return [];
   }
 
-  const days: Array<{ date: string; isoDate: string; inputTokens: number; outputTokens: number }> = [];
+  const days: Array<{ date: string; isoDate: string; inputTokens: number; outputTokens: number; costUsd: number }> = [];
   let current = new Date(`${keys[0]}T00:00:00Z`);
   const end = new Date(`${keys[keys.length - 1]}T00:00:00Z`);
 
@@ -321,7 +323,8 @@ function fillDailyChartGaps(bucket: Map<string, { date: string; isoDate: string;
         date: formatPromptChartDate(isoDate),
         isoDate,
         inputTokens: 0,
-        outputTokens: 0
+        outputTokens: 0,
+        costUsd: 0
       }
     );
     current.setUTCDate(current.getUTCDate() + 1);

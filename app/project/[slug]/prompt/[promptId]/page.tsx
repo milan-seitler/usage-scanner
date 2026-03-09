@@ -1,7 +1,7 @@
 import { ChevronDown, Wrench } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PromptCostPanel } from "@/components/prompt-cost-panel";
@@ -38,6 +38,7 @@ export default async function PromptDetailPage({
   const promptGroups = codexDetail ? groupPromptEpisodes(codexDetail.events) : [];
   const promptCostChartData = buildPromptCostChartData(promptGroups, pricingProfile);
   const promptHeaderTitle = truncatePageTitle(promptGroups[0]?.userMessage ?? prompt.title);
+  const breadcrumbTitle = truncateBreadcrumbTitle(promptGroups[0]?.userMessage ?? prompt.title);
 
   return (
     <AppShell
@@ -54,22 +55,22 @@ export default async function PromptDetailPage({
             {project.name}
           </Link>
           <span>/</span>
-          <span className="text-foreground">Prompt</span>
+          <span className="text-foreground">{breadcrumbTitle}</span>
         </nav>
       }
     >
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <PlainStatCard label="Model" value={prompt.model} />
+        <PlainStatCard label="Cost" value={formatUsd(prompt.costUsd)} />
         <PlainStatCard
           label="Session total"
           value={<SessionTotalValue totalTokens={prompt.totalTokens} inputTokens={prompt.inputTokens} cachedInputTokens={prompt.cachedInputTokens} outputTokens={prompt.outputTokens} />}
         />
-        <PlainStatCard label="Estimated cost" value={formatUsd(prompt.costUsd)} />
         <PlainStatCard label="Started" value={formatDateTime(prompt.startedAt)} />
       </section>
 
       <section className="grid gap-6">
-        {promptCostChartData.length > 0 ? <PromptCostPanel data={promptCostChartData} /> : <EmptyState text="No prompt-level cost data was recovered for this session." />}
+        {promptCostChartData.length > 0 ? <PromptCostPanel data={promptCostChartData} /> : <EmptyState text="No thread-level cost data was recovered for this session." />}
 
         <Card className="border-border bg-white shadow-none">
           <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -246,7 +247,9 @@ function PromptMessageCard({
   return (
     <div className={cn("rounded-lg border p-3", tone === "user" ? "border-emerald-200 bg-emerald-50/60" : "border-border bg-slate-50")}>
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{text}</p>
+      <div className="mt-2 space-y-3 text-sm text-foreground">
+        {renderFormattedMessage(text)}
+      </div>
     </div>
   );
 }
@@ -737,9 +740,11 @@ function groupPromptEpisodes(events: PromptEvent[]): PromptGroup[] {
 
 function buildPromptCostChartData(groups: PromptGroup[], pricingProfile: TokenPricingProfile | null) {
   let cumulativeCostUsd = 0;
+  let cumulativeTokens = 0;
 
   return groups
     .map((group, index) => {
+      const totalTokens = group.aggregateUsage?.totalTokens ?? 0;
       const costUsd = group.aggregateUsage
         ? estimateUsageCostUsd(
             {
@@ -752,17 +757,20 @@ function buildPromptCostChartData(groups: PromptGroup[], pricingProfile: TokenPr
         : 0;
 
       cumulativeCostUsd += costUsd;
+      cumulativeTokens += totalTokens;
 
       return {
         id: group.id,
         label: `P${index + 1}`,
         startedAt: formatTime(group.startedAt),
         promptPreview: truncatePromptPreview(group.userMessage),
+        totalTokens,
+        cumulativeTokens,
         costUsd,
         cumulativeCostUsd,
       };
     })
-    .filter((point) => point.costUsd > 0 || point.cumulativeCostUsd > 0);
+    .filter((point) => point.totalTokens > 0 || point.cumulativeTokens > 0 || point.costUsd > 0 || point.cumulativeCostUsd > 0);
 }
 
 function isSessionBootstrapMessage(text: string) {
@@ -783,4 +791,151 @@ function truncatePromptPreview(text: string) {
 function truncatePageTitle(text: string) {
   const normalized = text.replace(/\s+/g, " ").trim();
   return normalized.length > 120 ? `${normalized.slice(0, 120)}...` : normalized;
+}
+
+function truncateBreadcrumbTitle(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > 50 ? `${normalized.slice(0, 50)}...` : normalized;
+}
+
+function renderFormattedMessage(text: string) {
+  const blocks = splitMessageBlocks(text);
+
+  return blocks.map((block, index) => {
+    if (block.type === "code") {
+      return (
+        <pre key={`code-${index}`} className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-950/95 px-3 py-2 text-xs leading-6 text-slate-100">
+          <code>{block.content}</code>
+        </pre>
+      );
+    }
+
+    if (block.type === "ul") {
+      return (
+        <ul key={`ul-${index}`} className="space-y-1 pl-5 text-sm leading-7 list-disc">
+          {block.items.map((item, itemIndex) => (
+            <li key={`ul-item-${itemIndex}`}>{renderInlineMessageParts(item)}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    if (block.type === "ol") {
+      return (
+        <ol key={`ol-${index}`} className="space-y-1 pl-5 text-sm leading-7 list-decimal">
+          {block.items.map((item, itemIndex) => (
+            <li key={`ol-item-${itemIndex}`}>{renderInlineMessageParts(item)}</li>
+          ))}
+        </ol>
+      );
+    }
+
+    return (
+      <p key={`p-${index}`} className="whitespace-pre-wrap leading-7 text-foreground">
+        {renderInlineMessageParts(block.content)}
+      </p>
+    );
+  });
+}
+
+function renderInlineMessageParts(text: string) {
+  const parts = text.split(/(`[^`]+`)/g).filter(Boolean);
+
+  return parts.map((part, index) => {
+    if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) {
+      return (
+        <code key={`code-inline-${index}`} className="rounded bg-black/[0.06] px-1.5 py-0.5 font-mono text-[0.95em] text-foreground">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+
+    return <Fragment key={`text-${index}`}>{part}</Fragment>;
+  });
+}
+
+function splitMessageBlocks(text: string) {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return [{ type: "paragraph" as const, content: "" }];
+  }
+
+  const lines = normalized.split("\n");
+  const blocks: Array<
+    | { type: "paragraph"; content: string }
+    | { type: "code"; content: string }
+    | { type: "ul"; items: string[] }
+    | { type: "ol"; items: string[] }
+  > = [];
+
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith("```")) {
+      const codeLines: string[] = [];
+      index += 1;
+
+      while (index < lines.length && !lines[index].trim().startsWith("```")) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+
+      if (index < lines.length) {
+        index += 1;
+      }
+
+      blocks.push({ type: "code", content: codeLines.join("\n") });
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      const items: string[] = [];
+
+      while (index < lines.length && /^[-*]\s+/.test(lines[index].trim())) {
+        items.push(lines[index].trim().replace(/^[-*]\s+/, ""));
+        index += 1;
+      }
+
+      blocks.push({ type: "ul", items });
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const items: string[] = [];
+
+      while (index < lines.length && /^\d+\.\s+/.test(lines[index].trim())) {
+        items.push(lines[index].trim().replace(/^\d+\.\s+/, ""));
+        index += 1;
+      }
+
+      blocks.push({ type: "ol", items });
+      continue;
+    }
+
+    const paragraphLines: string[] = [];
+
+    while (index < lines.length) {
+      const current = lines[index];
+      const currentTrimmed = current.trim();
+
+      if (!currentTrimmed || currentTrimmed.startsWith("```") || /^[-*]\s+/.test(currentTrimmed) || /^\d+\.\s+/.test(currentTrimmed)) {
+        break;
+      }
+
+      paragraphLines.push(current);
+      index += 1;
+    }
+
+    blocks.push({ type: "paragraph", content: paragraphLines.join("\n") });
+  }
+
+  return blocks;
 }

@@ -21,9 +21,9 @@ export function ProjectSummaryTable({ rows }: { rows: SummaryRow[] }) {
       <TableHeader>
         <TableRow>
           <TableHead className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Project</TableHead>
-          <TableHead className="w-[140px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tools</TableHead>
+          <TableHead className="w-[220px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tools</TableHead>
           <TableHead className="w-[140px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Last edit</TableHead>
-          <TableHead className="w-[120px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Price</TableHead>
+          <TableHead className="w-[120px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Cost</TableHead>
           <TableHead className="w-[120px] text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Tokens</TableHead>
         </TableRow>
       </TableHeader>
@@ -35,7 +35,7 @@ export function ProjectSummaryTable({ rows }: { rows: SummaryRow[] }) {
             </TableCell>
             <TableCell className="text-sm text-muted-foreground">
               <Link className="block -m-4 p-4" href={`/project/${row.slug}`}>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-nowrap items-center gap-2 whitespace-nowrap">
                   {getToolBadges(row.sources).map((source) => (
                     <Badge key={source} variant="outline" className="font-normal text-muted-foreground">
                       {source}

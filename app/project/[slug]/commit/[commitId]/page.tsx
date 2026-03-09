@@ -45,7 +45,7 @@ export default async function CommitDetailPage({
               <div>
                 <CardTitle className="text-2xl">Commit overview</CardTitle>
                 <CardDescription className="mt-2 max-w-2xl">
-                  Use the commit as the shipping anchor, then inspect which prompt sessions fed into it.
+                  Use the commit as the shipping anchor, then inspect which threads fed into it.
                 </CardDescription>
               </div>
               <div className="rounded-2xl border border-border/70 bg-muted/25 p-4">
@@ -59,7 +59,7 @@ export default async function CommitDetailPage({
           <CardContent className="grid gap-3 md:grid-cols-4">
             <SummaryStrip icon={GitCommitHorizontal} label="Commit" value={commit.id} />
             <SummaryStrip icon={GitBranch} label="Branch" value={commit.branch} />
-            <SummaryStrip icon={MessagesSquare} label="Linked prompts" value={String(prompts.length)} />
+            <SummaryStrip icon={MessagesSquare} label="Linked threads" value={String(prompts.length)} />
             <SummaryStrip icon={Files} label="Files changed" value={String(commit.filesChanged)} />
           </CardContent>
         </Card>
@@ -71,7 +71,7 @@ export default async function CommitDetailPage({
           </CardHeader>
           <CardContent className="space-y-3">
             <MetricLine label="Known tokens linked">{tokenTotal.toLocaleString()}</MetricLine>
-            <MetricLine label="Prompts without tokens">{String(unknownPromptCount)}</MetricLine>
+            <MetricLine label="Threads without tokens">{String(unknownPromptCount)}</MetricLine>
             <MetricLine label="Author">{commit.author}</MetricLine>
           </CardContent>
         </Card>
@@ -88,20 +88,20 @@ export default async function CommitDetailPage({
             <MetricLine label="Author">{commit.author}</MetricLine>
             <MetricLine label="Diff size">{`+${commit.insertions} / -${commit.deletions}`}</MetricLine>
             <MetricLine label="Known tokens linked">{tokenTotal.toLocaleString()}</MetricLine>
-            <MetricLine label="Prompts without tokens">{String(unknownPromptCount)}</MetricLine>
+            <MetricLine label="Threads without tokens">{String(unknownPromptCount)}</MetricLine>
           </CardContent>
         </Card>
 
         <Card className="border-border/70 bg-white/85">
           <CardHeader>
-            <CardTitle>Prompt sessions feeding this commit</CardTitle>
+            <CardTitle>Threads feeding this commit</CardTitle>
             <CardDescription>One commit can aggregate several AI-assisted work sessions.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Prompt</TableHead>
+                  <TableHead>Thread</TableHead>
                   <TableHead>Tokens</TableHead>
                   <TableHead>Cached input</TableHead>
                   <TableHead>Source</TableHead>

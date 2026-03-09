@@ -57,17 +57,17 @@ export default async function HomePage({
   return (
     <AppShell title="Dashboard" section="dashboard" repoCount={projects.length}>
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Cost" value={formatUsd(totals.price)} />
         <MetricCard
           label="Tokens"
           value={<TokenSummaryValue totalTokens={totals.tokens} inputTokens={totals.input} cachedInputTokens={totals.cached} outputTokens={totals.output} />}
         />
-        <MetricCard label="Total price" value={formatUsd(totals.price)} />
-        <MetricCard label="Prompt sessions" value={String(projects.reduce((sum, project) => sum + project.prompts.length, 0))} />
+        <MetricCard label="Threads" value={String(projects.reduce((sum, project) => sum + project.prompts.length, 0))} />
         <MetricCard label="Active repos" value={String(projects.length)} />
       </section>
 
       <section>
-        <ProjectTokenPanel data={timeline} title="Token usage" />
+        <ProjectTokenPanel data={timeline} title="Usage" />
       </section>
 
       <section>

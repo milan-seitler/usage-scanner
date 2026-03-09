@@ -224,7 +224,7 @@ export function getProjectSummary(): ProjectSummary[] {
 }
 
 export function getDailyTimeline() {
-  const bucket = new Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number }>();
+  const bucket = new Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number; costUsd: number }>();
 
   getProjects().forEach((project) => {
     project.prompts.forEach((prompt) => {
@@ -233,9 +233,10 @@ export function getDailyTimeline() {
       }
 
       const date = prompt.startedAt.slice(0, 10);
-      const current = bucket.get(date) ?? { date, isoDate: date, inputTokens: 0, outputTokens: 0 };
+      const current = bucket.get(date) ?? { date, isoDate: date, inputTokens: 0, outputTokens: 0, costUsd: 0 };
       current.inputTokens += prompt.inputTokens ?? 0;
       current.outputTokens += prompt.outputTokens ?? 0;
+      current.costUsd += prompt.costUsd ?? 0;
       bucket.set(date, current);
     });
   });
@@ -497,13 +498,13 @@ function formatCompactTokenCount(value: number) {
   return String(value);
 }
 
-function fillDailyTokenGaps(bucket: Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number }>) {
+function fillDailyTokenGaps(bucket: Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number; costUsd: number }>) {
   const keys = Array.from(bucket.keys()).sort((a, b) => a.localeCompare(b));
   if (keys.length === 0) {
     return [];
   }
 
-  const days: Array<{ date: string; isoDate: string; inputTokens: number; outputTokens: number }> = [];
+  const days: Array<{ date: string; isoDate: string; inputTokens: number; outputTokens: number; costUsd: number }> = [];
   let current = new Date(`${keys[0]}T00:00:00Z`);
   const end = new Date(`${keys[keys.length - 1]}T00:00:00Z`);
 
@@ -514,7 +515,8 @@ function fillDailyTokenGaps(bucket: Map<string, { date: string; isoDate: string;
         date: isoDate,
         isoDate,
         inputTokens: 0,
-        outputTokens: 0
+        outputTokens: 0,
+        costUsd: 0
       }
     );
     current.setUTCDate(current.getUTCDate() + 1);

@@ -4,20 +4,30 @@ import * as React from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { formatUsd } from "@/lib/pricing";
 
 type ChartPoint = {
   isoDate?: string;
   date: string;
   inputTokens: number;
   outputTokens: number;
+  costUsd: number;
 };
 
 type RangeKey = "7d" | "30d" | "90d" | "all";
+export type UsageMetric = "tokens" | "price";
 
-const chartConfig = {
+const tokenChartConfig = {
   totalTokens: {
     label: "Total",
     color: "hsl(var(--chart-1))"
+  }
+} satisfies ChartConfig;
+
+const priceChartConfig = {
+  costUsd: {
+    label: "Cost",
+    color: "hsl(var(--chart-2))"
   }
 } satisfies ChartConfig;
 
@@ -28,11 +38,13 @@ export function DashboardTokenChart({ data }: { data: ChartPoint[] }) {
 export function TokenBarChart({
   data,
   className = "h-[220px]",
-  range = "30d"
+  range = "30d",
+  metric = "tokens"
 }: {
   data: ChartPoint[];
   className?: string;
   range?: RangeKey;
+  metric?: UsageMetric;
 }) {
   const normalizedData = React.useMemo(
     () =>
@@ -44,6 +56,9 @@ export function TokenBarChart({
     [data]
   );
   const visibleData = React.useMemo(() => filterChartRange(normalizedData, range), [normalizedData, range]);
+  const dataKey = metric === "price" ? "costUsd" : "totalTokens";
+  const barColor = metric === "price" ? "hsl(var(--chart-2))" : "hsl(var(--chart-1))";
+  const chartConfig = metric === "price" ? priceChartConfig : tokenChartConfig;
 
   return (
     <ChartContainer config={chartConfig} className={className}>
@@ -56,14 +71,20 @@ export function TokenBarChart({
           tickMargin={10}
           tick={{ fontSize: 11, fill: "rgba(107,114,128,0.9)" }}
         />
-        <YAxis axisLine={false} tickLine={false} tickMargin={10} tick={{ fontSize: 11, fill: "rgba(107,114,128,0.9)" }} />
+        <YAxis
+          axisLine={false}
+          tickLine={false}
+          tickMargin={10}
+          tick={{ fontSize: 11, fill: "rgba(107,114,128,0.9)" }}
+          tickFormatter={(value: number) => (metric === "price" ? formatCompactUsd(value) : formatCompactTokens(value))}
+        />
         <ChartTooltip
           cursor={false}
-          content={<ChartTooltipContent labelFormatter={formatTooltipDate} formatter={(value: number) => [`${value.toLocaleString()} tokens`]} />}
+          content={<ChartTooltipContent labelFormatter={formatTooltipDate} formatter={(value: number) => [metric === "price" ? formatUsd(value) : `${value.toLocaleString()} tokens`]} />}
         />
         <Bar
-          dataKey="totalTokens"
-          fill="hsl(var(--chart-1))"
+          dataKey={dataKey}
+          fill={barColor}
           radius={[4, 4, 0, 0]}
           minPointSize={6}
         />
@@ -96,4 +117,20 @@ function formatTooltipDate(_label: string, payload?: Array<{ payload?: { isoDate
     month: "short",
     day: "numeric"
   }).format(new Date(`${isoDate}T00:00:00Z`));
+}
+
+function formatCompactTokens(value: number) {
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
+  return String(value);
+}
+
+function formatCompactUsd(value: number) {
+  if (value >= 1000) return `$${Math.round(value).toLocaleString()}`;
+  if (value >= 100) return `$${Math.round(value)}`;
+  if (value >= 10) return `$${value.toFixed(0)}`;
+  if (value >= 1) return `$${value.toFixed(1)}`;
+  if (value === 0) return "$0";
+  return "<$1";
 }
