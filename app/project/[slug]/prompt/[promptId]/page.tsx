@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getProjects, getPromptDetail, type PromptEvent, type PromptTimelineItem } from "@/lib/data";
+import { estimateUsageCostUsd, formatUsd, resolveTokenPricingProfile, type TokenPricingProfile } from "@/lib/pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function PromptDetailPage({
   }
 
   const { project, prompt, commit, codexDetail, efficiency } = detail;
+  const pricingProfile = resolveTokenPricingProfile(prompt.model);
 
   return (
     <AppShell eyebrow="Prompt Detail" title={prompt.title} section="prompt" repoCount={repoCount}>
@@ -39,23 +41,26 @@ export default async function PromptDetailPage({
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <PlainStatCard label="Model" value={prompt.model} meta="codex" />
-        <PlainStatCard label="Known tokens" value={prompt.totalTokens != null ? formatCompactTokens(prompt.totalTokens) : "n/a"} meta="total" />
-        <PlainStatCard label="Started" value={formatTime(prompt.startedAt)} meta="today" />
-        <PlainStatCard label="Linked commit" value={commit?.id ?? "None"} meta={commit ? "yes" : "no"} />
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <PlainStatCard label="Model" value={prompt.model} />
+        <PlainStatCard label="Session total" value={prompt.totalTokens != null ? formatCompactTokens(prompt.totalTokens) : "n/a"} />
+        <PlainStatCard label="Estimated cost" value={formatUsd(prompt.costUsd)} />
+        <PlainStatCard label="Started" value={formatTime(prompt.startedAt)} />
+        <PlainStatCard label="Linked commit" value={commit?.id ?? "None"} />
       </section>
 
       <section className="grid gap-6">
         <Card className="border-border bg-white shadow-none">
           <CardHeader>
             <CardTitle>Recovered session metadata</CardTitle>
-            <CardDescription>This is the level recovered from local IDE databases and agent logs.</CardDescription>
+            <CardDescription>
+              This is the level recovered from local IDE databases and agent logs. Session totals use the latest cumulative token snapshot. Estimated cost uses the current {pricingProfile?.label ?? "model"} pricing profile.
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-3 pt-0">
-            <MiniMetaCard label="Input tokens" value={renderNumber(prompt.inputTokens)} state="known" />
-            <MiniMetaCard label="Output tokens" value={renderNumber(prompt.outputTokens)} state="known" />
-            <MiniMetaCard label="Cached input" value={renderNumber(prompt.cachedInputTokens)} state={prompt.cachedInputTokens != null ? "partial" : "none"} />
+            <MiniMetaCard label="Session input" value={renderNumber(prompt.inputTokens)} />
+            <MiniMetaCard label="Session output" value={renderNumber(prompt.outputTokens)} />
+            <MiniMetaCard label="Session cached" value={renderNumber(prompt.cachedInputTokens)} />
           </CardContent>
         </Card>
 
@@ -69,7 +74,7 @@ export default async function PromptDetailPage({
               <>
                 <EfficiencyOverview overview={efficiency.overview} />
                 {efficiency.items.map((item) => <TimelineItemRow key={item.id} item={item} />)}
-                <RawCheckpointPanel checkpoints={efficiency.checkpoints} />
+                <RawCheckpointPanel checkpoints={efficiency.checkpoints} pricingProfile={pricingProfile} />
               </>
             ) : prompt.source === "Codex" && codexDetail ? (
               codexDetail.events.length > 0 ? (
@@ -87,30 +92,24 @@ export default async function PromptDetailPage({
   );
 }
 
-function PlainStatCard({ label, value, meta }: { label: string; value: string; meta: string }) {
+function PlainStatCard({ label, value }: { label: string; value: string }) {
   return (
     <Card className="border-border bg-white shadow-none">
       <CardHeader className="gap-1 pb-2">
         <CardDescription className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</CardDescription>
         <CardTitle className="text-2xl">{value}</CardTitle>
       </CardHeader>
-      <CardContent className="pt-0">
-        <p className="text-xs text-muted-foreground">{meta}</p>
-      </CardContent>
     </Card>
   );
 }
 
-function MiniMetaCard({ label, value, state }: { label: string; value: string; state: string }) {
+function MiniMetaCard({ label, value }: { label: string; value: string }) {
   return (
     <Card className="border-border bg-white shadow-none">
       <CardHeader className="gap-1 pb-1">
         <CardDescription className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</CardDescription>
         <CardTitle className="text-xl">{value}</CardTitle>
       </CardHeader>
-      <CardContent className="pt-0">
-        <p className="text-xs text-muted-foreground">{state}</p>
-      </CardContent>
     </Card>
   );
 }
@@ -200,9 +199,20 @@ function TimelineItemRow({ item }: { item: PromptTimelineItem }) {
 
 function TokenCheckpointRow({ item }: { item: PromptTimelineItem }) {
   const checkpoint = item.rawEvents[0]?.kind === "token_count" ? item.rawEvents[0] : null;
+  const pricingProfile = resolveTokenPricingProfile("Codex");
+  const lastCost = checkpoint
+    ? estimateUsageCostUsd(
+        {
+          inputTokens: checkpoint.inputTokens,
+          cachedInputTokens: checkpoint.cachedInputTokens,
+          outputTokens: checkpoint.outputTokens,
+        },
+        pricingProfile
+      )
+    : null;
   const inlineCount = checkpoint
-    ? `+${formatCompactTokens(item.estimatedInputTokens)}/+${formatCompactTokens(item.estimatedOutputTokens)} (${formatCompactTokens(checkpoint.inputTokens)}/${formatCompactTokens(checkpoint.outputTokens)})`
-    : `+${formatCompactTokens(item.estimatedInputTokens)}/+${formatCompactTokens(item.estimatedOutputTokens)}`;
+    ? `${formatCompactTokens(checkpoint.totalTokens)} last / ${formatCompactTokens(checkpoint.sessionTotalTokens)} session`
+    : `${formatCompactTokens(item.estimatedTotalTokens)} last`;
 
   return (
     <details className="group rounded-xl border border-border bg-white">
@@ -213,6 +223,7 @@ function TokenCheckpointRow({ item }: { item: PromptTimelineItem }) {
             <p className="truncate text-sm font-medium text-foreground">Token checkpoint {inlineCount}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {lastCost != null ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">{formatUsd(lastCost)} last</span> : null}
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">tokens</span>
             <p className="text-xs font-medium text-foreground">{formatTime(item.timestamp)}</p>
             <ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" />
@@ -253,7 +264,8 @@ function getActionType(item: PromptTimelineItem) {
 }
 
 function RawCheckpointPanel({
-  checkpoints
+  checkpoints,
+  pricingProfile
 }: {
   checkpoints: Array<{
     timestamp: string;
@@ -261,7 +273,12 @@ function RawCheckpointPanel({
     cachedInputTokens: number;
     outputTokens: number;
     totalTokens: number;
+    sessionInputTokens: number;
+    sessionCachedInputTokens: number;
+    sessionOutputTokens: number;
+    sessionTotalTokens: number;
   }>;
+  pricingProfile: TokenPricingProfile | null;
 }) {
   return (
     <details className="group rounded-xl border border-dashed border-border bg-white">
@@ -269,7 +286,7 @@ function RawCheckpointPanel({
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-foreground">Raw token checkpoints</p>
-            <p className="mt-1 text-xs text-muted-foreground">Cumulative token snapshots from the underlying session log.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Each checkpoint shows both last-request usage and cumulative session total from the underlying session log.</p>
           </div>
           <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition group-open:rotate-180" />
         </div>
@@ -277,13 +294,51 @@ function RawCheckpointPanel({
       <div className="border-t border-border px-4 py-4">
         <div className="space-y-2">
           {checkpoints.map((checkpoint) => (
-            <div key={`${checkpoint.timestamp}-${checkpoint.totalTokens}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-slate-50 px-3 py-2">
+            <div key={`${checkpoint.timestamp}-${checkpoint.sessionTotalTokens}-${checkpoint.totalTokens}`} className="space-y-2 rounded-lg border border-border bg-slate-50 px-3 py-2">
               <p className="text-xs font-medium text-foreground">{formatTime(checkpoint.timestamp)}</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Last request</p>
                 <Badge variant="outline">{formatCompactTokens(checkpoint.inputTokens)} input</Badge>
                 <Badge variant="outline">{formatCompactTokens(checkpoint.cachedInputTokens)} cached</Badge>
                 <Badge variant="outline">{formatCompactTokens(checkpoint.outputTokens)} output</Badge>
                 <Badge variant="secondary">{formatCompactTokens(checkpoint.totalTokens)} total</Badge>
+                {pricingProfile ? (
+                  <Badge variant="outline">
+                    {formatUsd(
+                      estimateUsageCostUsd(
+                        {
+                          inputTokens: checkpoint.inputTokens,
+                          cachedInputTokens: checkpoint.cachedInputTokens,
+                          outputTokens: checkpoint.outputTokens,
+                        },
+                        pricingProfile
+                      )
+                    )}{" "}
+                    est.
+                  </Badge>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Session total</p>
+                <Badge variant="outline">{formatCompactTokens(checkpoint.sessionInputTokens)} input</Badge>
+                <Badge variant="outline">{formatCompactTokens(checkpoint.sessionCachedInputTokens)} cached</Badge>
+                <Badge variant="outline">{formatCompactTokens(checkpoint.sessionOutputTokens)} output</Badge>
+                <Badge variant="secondary">{formatCompactTokens(checkpoint.sessionTotalTokens)} total</Badge>
+                {pricingProfile ? (
+                  <Badge variant="outline">
+                    {formatUsd(
+                      estimateUsageCostUsd(
+                        {
+                          inputTokens: checkpoint.sessionInputTokens,
+                          cachedInputTokens: checkpoint.sessionCachedInputTokens,
+                          outputTokens: checkpoint.sessionOutputTokens,
+                        },
+                        pricingProfile
+                      )
+                    )}{" "}
+                    est.
+                  </Badge>
+                ) : null}
               </div>
             </div>
           ))}
@@ -357,9 +412,20 @@ function renderEventContent(event: PromptEvent) {
 
   return (
     <div className="flex flex-wrap gap-2">
-      <Badge variant="secondary">{event.inputTokens.toLocaleString()} input</Badge>
-      <Badge variant="secondary">{event.outputTokens.toLocaleString()} output</Badge>
-      <Badge variant="secondary">{event.totalTokens.toLocaleString()} total</Badge>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Last request</span>
+        <Badge variant="secondary">{event.inputTokens.toLocaleString()} input</Badge>
+        <Badge variant="secondary">{event.cachedInputTokens.toLocaleString()} cached</Badge>
+        <Badge variant="secondary">{event.outputTokens.toLocaleString()} output</Badge>
+        <Badge variant="secondary">{event.totalTokens.toLocaleString()} total</Badge>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Session total</span>
+        <Badge variant="outline">{event.sessionInputTokens.toLocaleString()} input</Badge>
+        <Badge variant="outline">{event.sessionCachedInputTokens.toLocaleString()} cached</Badge>
+        <Badge variant="outline">{event.sessionOutputTokens.toLocaleString()} output</Badge>
+        <Badge variant="outline">{event.sessionTotalTokens.toLocaleString()} total</Badge>
+      </div>
     </div>
   );
 }

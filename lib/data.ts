@@ -2,6 +2,7 @@ import { cache } from "react";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { estimateUsageCostUsd, resolveTokenPricingProfile } from "@/lib/pricing";
 
 const PROJECTS_ROOT = "/Users/your-name/Developer/Projects";
 const CODEX_ROOT = "/Users/your-name/.codex";
@@ -57,6 +58,10 @@ export type PromptEvent =
       cachedInputTokens: number;
       outputTokens: number;
       totalTokens: number;
+      sessionInputTokens: number;
+      sessionCachedInputTokens: number;
+      sessionOutputTokens: number;
+      sessionTotalTokens: number;
     };
 
 export type CommitRecord = {
@@ -133,6 +138,10 @@ export type PromptTokenCheckpoint = {
   cachedInputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  sessionInputTokens: number;
+  sessionCachedInputTokens: number;
+  sessionOutputTokens: number;
+  sessionTotalTokens: number;
 };
 
 export type PromptEfficiencyOverview = {
@@ -311,16 +320,20 @@ function derivePromptEfficiency(events: PromptEvent[]) {
         cachedInputTokens: event.cachedInputTokens,
         outputTokens: event.outputTokens,
         totalTokens: event.totalTokens,
+        sessionInputTokens: event.sessionInputTokens,
+        sessionCachedInputTokens: event.sessionCachedInputTokens,
+        sessionOutputTokens: event.sessionOutputTokens,
+        sessionTotalTokens: event.sessionTotalTokens,
       });
 
       items.push({
         id: `${event.timestamp}-token`,
         kind: "token_checkpoint",
         title: "Token checkpoint",
-        subtitle: "Cumulative session usage snapshot",
+        subtitle: "Last request usage with cumulative session total",
         timestamp: event.timestamp,
-        signal: `Total ${formatCompactTokenCount(event.totalTokens)} after +${formatCompactTokenCount(deltaTotal)} new tokens.`,
-        tokenHint: `${formatCompactTokenCount(event.totalTokens)} total`,
+        signal: `Last request ${formatCompactTokenCount(event.totalTokens)}; session total ${formatCompactTokenCount(event.sessionTotalTokens)}.`,
+        tokenHint: `${formatCompactTokenCount(event.totalTokens)} last`,
         estimatedInputTokens: deltaInput,
         estimatedOutputTokens: deltaOutput,
         estimatedTotalTokens: deltaTotal,
@@ -624,7 +637,7 @@ function parseCodexSession(filePath: string, sessionIndex: Map<string, string>) 
   let model = "Codex";
   let title = "";
   let firstUserText = "";
-  const usageTotals: Required<CodexTokenUsage> = {
+  const latestUsage: Required<CodexTokenUsage> = {
     input_tokens: 0,
     cached_input_tokens: 0,
     output_tokens: 0,
@@ -644,8 +657,12 @@ function parseCodexSession(filePath: string, sessionIndex: Map<string, string>) 
       id = row.payload?.id ?? id;
       cwd = row.payload?.cwd ?? cwd;
       startedAt = row.payload?.timestamp ?? startedAt;
-      model = row.payload?.originator === "codex_cli_rs" ? "Codex CLI" : "Codex Desktop";
       title = sessionIndex.get(id) ?? title;
+      continue;
+    }
+
+    if (row.type === "turn_context" && typeof row.payload?.model === "string" && row.payload.model.trim()) {
+      model = row.payload.model.trim();
       continue;
     }
 
@@ -663,12 +680,15 @@ function parseCodexSession(filePath: string, sessionIndex: Map<string, string>) 
     }
 
     if (row.type === "event_msg" && row.payload?.type === "token_count") {
+      const totalUsage = row.payload?.info?.total_token_usage as CodexTokenUsage | undefined;
       const lastUsage = row.payload?.info?.last_token_usage as CodexTokenUsage | undefined;
-      if (lastUsage) {
-        usageTotals.input_tokens += lastUsage.input_tokens ?? 0;
-        usageTotals.cached_input_tokens += lastUsage.cached_input_tokens ?? 0;
-        usageTotals.output_tokens += lastUsage.output_tokens ?? 0;
-        usageTotals.total_tokens += lastUsage.total_tokens ?? 0;
+      const preferredUsage = totalUsage ?? lastUsage;
+
+      if (preferredUsage) {
+        latestUsage.input_tokens = preferredUsage.input_tokens ?? 0;
+        latestUsage.cached_input_tokens = preferredUsage.cached_input_tokens ?? 0;
+        latestUsage.output_tokens = preferredUsage.output_tokens ?? 0;
+        latestUsage.total_tokens = preferredUsage.total_tokens ?? 0;
       }
     }
   }
@@ -686,13 +706,24 @@ function parseCodexSession(filePath: string, sessionIndex: Map<string, string>) 
     model,
     title: cleanTitle,
     summary:
-      usageTotals.total_tokens > 0
-        ? "Recovered from Codex session logs with aggregated per-event token usage and project cwd."
+      latestUsage.total_tokens > 0
+        ? "Recovered from Codex session logs using the latest session token-usage snapshot and project cwd."
         : "Recovered from Codex session logs. This session did not expose token usage events.",
-    inputTokens: usageTotals.total_tokens > 0 ? usageTotals.input_tokens : null,
-    cachedInputTokens: usageTotals.total_tokens > 0 ? usageTotals.cached_input_tokens : null,
-    outputTokens: usageTotals.total_tokens > 0 ? usageTotals.output_tokens : null,
-    totalTokens: usageTotals.total_tokens > 0 ? usageTotals.total_tokens : null,
+    inputTokens: latestUsage.total_tokens > 0 ? latestUsage.input_tokens : null,
+    cachedInputTokens: latestUsage.total_tokens > 0 ? latestUsage.cached_input_tokens : null,
+    outputTokens: latestUsage.total_tokens > 0 ? latestUsage.output_tokens : null,
+    totalTokens: latestUsage.total_tokens > 0 ? latestUsage.total_tokens : null,
+    costUsd:
+      latestUsage.total_tokens > 0
+        ? estimateUsageCostUsd(
+            {
+              inputTokens: latestUsage.input_tokens,
+              cachedInputTokens: latestUsage.cached_input_tokens,
+              outputTokens: latestUsage.output_tokens,
+            },
+            resolveTokenPricingProfile(model)
+          )
+        : null,
   };
 }
 
@@ -734,8 +765,9 @@ function readCodexSessionDetail(sessionId: string): CodexSessionDetail | null {
     }
 
     if (row.type === "event_msg" && row.payload?.type === "token_count") {
+      const totalUsage = row.payload?.info?.total_token_usage;
       const lastUsage = row.payload?.info?.last_token_usage;
-      if (lastUsage) {
+      if (lastUsage || totalUsage) {
         events.push({
           kind: "token_count",
           timestamp,
@@ -743,6 +775,10 @@ function readCodexSessionDetail(sessionId: string): CodexSessionDetail | null {
           cachedInputTokens: Number(lastUsage.cached_input_tokens ?? 0),
           outputTokens: Number(lastUsage.output_tokens ?? 0),
           totalTokens: Number(lastUsage.total_tokens ?? 0),
+          sessionInputTokens: Number(totalUsage?.input_tokens ?? lastUsage?.input_tokens ?? 0),
+          sessionCachedInputTokens: Number(totalUsage?.cached_input_tokens ?? lastUsage?.cached_input_tokens ?? 0),
+          sessionOutputTokens: Number(totalUsage?.output_tokens ?? lastUsage?.output_tokens ?? 0),
+          sessionTotalTokens: Number(totalUsage?.total_tokens ?? lastUsage?.total_tokens ?? 0),
         });
       }
       continue;
