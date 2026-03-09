@@ -81,16 +81,19 @@ export function ChartTooltipContent({
           const value = typeof item.value === "number" ? item.value : 0;
           const name = item.name ?? key;
           const rendered = formatter ? formatter(value, name, item, 0, payload) : value;
+          const primary = Array.isArray(rendered) ? rendered[0] : rendered;
+          const secondary = Array.isArray(rendered) ? rendered[1] : null;
 
           return (
-            <div key={key} className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry?.color ?? item.color }} />
-                <span>{entry?.label ?? item.name}</span>
+            <div key={key} className="grid gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry?.color ?? item.color }} />
+                  <span>{entry?.label ?? item.name}</span>
+                </div>
+                <div className="font-medium text-foreground">{primary}</div>
               </div>
-              <div className="font-medium text-foreground">
-                {Array.isArray(rendered) ? rendered[0] : rendered}
-              </div>
+              {typeof secondary === "string" && secondary ? <div className="max-w-[260px] text-xs text-muted-foreground">{secondary}</div> : null}
             </div>
           );
         })}

@@ -297,7 +297,7 @@ function scanCodexSessions(projectMap: Map<string, MutableProject>) {
       outputTokens: parsed.outputTokens,
       cachedInputTokens: parsed.cachedInputTokens,
       totalTokens: parsed.totalTokens,
-      costUsd: null,
+      costUsd: parsed.costUsd,
       summary: parsed.summary,
     });
   });

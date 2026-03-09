@@ -1,21 +1,30 @@
 import { ChevronDown, Wrench } from "lucide-react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { PromptCostPanel } from "@/components/prompt-cost-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getProjects, getPromptDetail, type PromptEvent, type PromptTimelineItem } from "@/lib/data";
 import { estimateUsageCostUsd, formatUsd, resolveTokenPricingProfile, type TokenPricingProfile } from "@/lib/pricing";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+type TimelineView = "prompts" | "full";
+
 export default async function PromptDetailPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ slug: string; promptId: string }>;
+  searchParams?: Promise<{ view?: string }>;
 }) {
   const { slug, promptId } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const detail = getPromptDetail(slug, promptId);
   const repoCount = getProjects().length;
 
@@ -23,62 +32,74 @@ export default async function PromptDetailPage({
     notFound();
   }
 
-  const { project, prompt, commit, codexDetail, efficiency } = detail;
+  const { project, prompt, codexDetail, efficiency } = detail;
   const pricingProfile = resolveTokenPricingProfile(prompt.model);
+  const view = normalizeTimelineView(resolvedSearchParams?.view);
+  const promptGroups = codexDetail ? groupPromptEpisodes(codexDetail.events) : [];
+  const promptCostChartData = buildPromptCostChartData(promptGroups, pricingProfile);
+  const promptHeaderTitle = promptGroups[0]?.userMessage ?? prompt.title;
 
   return (
-    <AppShell eyebrow="Prompt Detail" title={prompt.title} section="prompt" repoCount={repoCount}>
-      <section className="flex flex-col gap-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-2">
-            <p className="max-w-3xl text-sm text-muted-foreground">
-              Prompt detail view for one session, tied back to repo, tokens, and commit outcome.
-            </p>
-          </div>
-          <Button href={`/project/${project.slug}`} variant="outline">
-            Back to project
-          </Button>
-        </div>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+    <AppShell
+      title={promptHeaderTitle}
+      section="prompt"
+      repoCount={repoCount}
+      breadcrumbs={
+        <nav className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Link className="transition hover:text-foreground" href="/">
+            Dashboard
+          </Link>
+          <span>/</span>
+          <Link className="transition hover:text-foreground" href={`/project/${project.slug}`}>
+            {project.name}
+          </Link>
+          <span>/</span>
+          <span className="text-foreground">Prompt</span>
+        </nav>
+      }
+    >
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <PlainStatCard label="Model" value={prompt.model} />
-        <PlainStatCard label="Session total" value={prompt.totalTokens != null ? formatCompactTokens(prompt.totalTokens) : "n/a"} />
+        <PlainStatCard
+          label="Session total"
+          value={<SessionTotalValue totalTokens={prompt.totalTokens} inputTokens={prompt.inputTokens} cachedInputTokens={prompt.cachedInputTokens} outputTokens={prompt.outputTokens} />}
+        />
         <PlainStatCard label="Estimated cost" value={formatUsd(prompt.costUsd)} />
-        <PlainStatCard label="Started" value={formatTime(prompt.startedAt)} />
-        <PlainStatCard label="Linked commit" value={commit?.id ?? "None"} />
+        <PlainStatCard label="Started" value={formatDateTime(prompt.startedAt)} />
       </section>
 
       <section className="grid gap-6">
-        <Card className="border-border bg-white shadow-none">
-          <CardHeader>
-            <CardTitle>Recovered session metadata</CardTitle>
-            <CardDescription>
-              This is the level recovered from local IDE databases and agent logs. Session totals use the latest cumulative token snapshot. Estimated cost uses the current {pricingProfile?.label ?? "model"} pricing profile.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-3 pt-0">
-            <MiniMetaCard label="Session input" value={renderNumber(prompt.inputTokens)} />
-            <MiniMetaCard label="Session output" value={renderNumber(prompt.outputTokens)} />
-            <MiniMetaCard label="Session cached" value={renderNumber(prompt.cachedInputTokens)} />
-          </CardContent>
-        </Card>
+        {promptCostChartData.length > 0 ? <PromptCostPanel data={promptCostChartData} /> : <EmptyState text="No prompt-level cost data was recovered for this session." />}
 
         <Card className="border-border bg-white shadow-none">
-          <CardHeader>
-            <CardTitle>Session timeline</CardTitle>
-            <CardDescription>Grouped into work episodes, then reframed around efficiency diagnosis and savings opportunities.</CardDescription>
+          <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle>Session timeline</CardTitle>
+            </div>
+            <div className="inline-flex w-fit rounded-lg border border-border bg-slate-50 p-1">
+              <TimelineViewButton slug={project.slug} promptId={prompt.id} view={view} target="prompts" />
+              <TimelineViewButton slug={project.slug} promptId={prompt.id} view={view} target="full" />
+            </div>
           </CardHeader>
           <CardContent className="space-y-4 pt-0">
-            {efficiency ? (
+            {view === "prompts" && prompt.source === "Codex" && codexDetail ? (
+              promptGroups.length > 0 ? (
+                promptGroups.map((group) => <PromptGroupRow key={group.id} group={group} pricingProfile={pricingProfile} />)
+              ) : (
+                <EmptyState text="No prompt groups were recovered for this Codex session." />
+              )
+            ) : efficiency ? (
               <>
-                <EfficiencyOverview overview={efficiency.overview} />
-                {efficiency.items.map((item) => <TimelineItemRow key={item.id} item={item} />)}
+                {[...efficiency.items]
+                  .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                  .map((item) => <TimelineItemRow key={item.id} item={item} />)}
                 <RawCheckpointPanel checkpoints={efficiency.checkpoints} pricingProfile={pricingProfile} />
               </>
             ) : prompt.source === "Codex" && codexDetail ? (
               codexDetail.events.length > 0 ? (
-                codexDetail.events.map((event, index) => <LegacyTimelineRow key={`${event.timestamp}-${index}`} event={event} />)
+                [...codexDetail.events]
+                  .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                  .map((event, index) => <LegacyTimelineRow key={`${event.timestamp}-${index}`} event={event} />)
               ) : (
                 <EmptyState text="No detailed events were found for this Codex session." />
               )
@@ -92,10 +113,10 @@ export default async function PromptDetailPage({
   );
 }
 
-function PlainStatCard({ label, value }: { label: string; value: string }) {
+function PlainStatCard({ label, value }: { label: string; value: ReactNode }) {
   return (
     <Card className="border-border bg-white shadow-none">
-      <CardHeader className="gap-1 pb-2">
+      <CardHeader className="gap-1 pb-5">
         <CardDescription className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</CardDescription>
         <CardTitle className="text-2xl">{value}</CardTitle>
       </CardHeader>
@@ -103,14 +124,159 @@ function PlainStatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MiniMetaCard({ label, value }: { label: string; value: string }) {
+function SessionTotalValue({
+  totalTokens,
+  inputTokens,
+  cachedInputTokens,
+  outputTokens
+}: {
+  totalTokens: number | null;
+  inputTokens: number | null;
+  cachedInputTokens: number | null;
+  outputTokens: number | null;
+}) {
   return (
-    <Card className="border-border bg-white shadow-none">
-      <CardHeader className="gap-1 pb-1">
-        <CardDescription className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</CardDescription>
-        <CardTitle className="text-xl">{value}</CardTitle>
-      </CardHeader>
-    </Card>
+    <span className="group relative inline-flex">
+      <span className="border-b border-dashed border-slate-400/80 leading-none">{totalTokens != null ? formatCompactTokens(totalTokens) : "n/a"}</span>
+      <span className="pointer-events-none absolute left-0 top-full z-20 mt-3 hidden min-w-[220px] rounded-lg border border-border bg-white p-3 text-left text-sm font-medium text-foreground shadow-xl group-hover:block">
+        <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Session breakdown</span>
+        <span className="mt-2 block text-sm text-foreground">{renderNumber(inputTokens)} input</span>
+        <span className="mt-1 block text-sm text-foreground">{renderNumber(cachedInputTokens)} cached</span>
+        <span className="mt-1 block text-sm text-foreground">{renderNumber(outputTokens)} output</span>
+      </span>
+    </span>
+  );
+}
+
+function TimelineViewButton({
+  slug,
+  promptId,
+  view,
+  target
+}: {
+  slug: string;
+  promptId: string;
+  view: TimelineView;
+  target: TimelineView;
+}) {
+  const active = view === target;
+
+  return (
+    <Button
+      href={`/project/${slug}/prompt/${promptId}?view=${target}`}
+      variant="ghost"
+      size="sm"
+      className={cn(
+        "rounded-md px-3 capitalize",
+        active ? "bg-white text-foreground shadow-sm hover:bg-white" : "text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {target}
+    </Button>
+  );
+}
+
+type PromptGroup = {
+  id: string;
+  startedAt: string;
+  endedAt: string;
+  userMessage: string;
+  assistantMessage: string | null;
+  tokenEvents: Array<Extract<PromptEvent, { kind: "token_count" }>>;
+  aggregateUsage: {
+    inputTokens: number;
+    cachedInputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  } | null;
+};
+
+function PromptGroupRow({
+  group,
+  pricingProfile
+}: {
+  group: PromptGroup;
+  pricingProfile: TokenPricingProfile | null;
+}) {
+  const estimatedCost = group.aggregateUsage
+    ? estimateUsageCostUsd(
+        {
+          inputTokens: group.aggregateUsage.inputTokens,
+          cachedInputTokens: group.aggregateUsage.cachedInputTokens,
+          outputTokens: group.aggregateUsage.outputTokens,
+        },
+        pricingProfile
+      )
+    : null;
+
+  return (
+    <details className="group rounded-xl border border-border bg-white">
+      <summary className="cursor-pointer list-none p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">{formatUsd(estimatedCost)}</Badge>
+              <p className="text-xs font-medium text-muted-foreground">
+                {formatTime(group.startedAt)} <span className="text-slate-400">·</span> {formatDuration(group.startedAt, group.endedAt)}
+              </p>
+            </div>
+            <p className="line-clamp-2 text-sm font-medium text-foreground">{group.userMessage}</p>
+          </div>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition group-open:rotate-180" />
+        </div>
+      </summary>
+      <div className="space-y-4 border-t border-border px-4 py-4">
+        <PromptMessageCard label="User message" text={group.userMessage} tone="user" />
+        <PromptMessageCard label="Final assistant message" text={group.assistantMessage ?? "No assistant message captured for this group."} tone="assistant" />
+        {group.aggregateUsage ? <PromptUsageCard usage={group.aggregateUsage} estimatedCost={estimatedCost} requestsCount={group.tokenEvents.length} /> : null}
+      </div>
+    </details>
+  );
+}
+
+function PromptMessageCard({
+  label,
+  text,
+  tone
+}: {
+  label: string;
+  text: string;
+  tone: "user" | "assistant";
+}) {
+  return (
+    <div className={cn("rounded-lg border p-3", tone === "user" ? "border-emerald-200 bg-emerald-50/60" : "border-border bg-slate-50")}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+      <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{text}</p>
+    </div>
+  );
+}
+
+function PromptUsageCard({
+  usage,
+  estimatedCost,
+  requestsCount
+}: {
+  usage: {
+    inputTokens: number;
+    cachedInputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  estimatedCost: number | null;
+  requestsCount: number;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-slate-50 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Usage</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Badge variant="secondary">{formatCompactTokens(usage.inputTokens)} input</Badge>
+        <Badge variant="secondary">{formatCompactTokens(usage.cachedInputTokens)} cached</Badge>
+        <Badge variant="secondary">{formatCompactTokens(usage.outputTokens)} output</Badge>
+        <Badge variant="secondary">{formatCompactTokens(usage.totalTokens)} total</Badge>
+        {requestsCount > 1 ? <Badge variant="outline">{requestsCount} requests summed</Badge> : null}
+        <Badge variant="outline">{formatUsd(estimatedCost)} est.</Badge>
+      </div>
+    </div>
   );
 }
 
@@ -478,6 +644,32 @@ function formatTime(value: string) {
   }).format(new Date(value));
 }
 
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(new Date(value));
+}
+
+function formatDuration(startedAt: string, endedAt: string) {
+  const durationMs = Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime());
+  const totalSeconds = Math.round(durationMs / 1000);
+
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
+}
+
 function renderNumber(value: number | null) {
   return value == null ? "n/a" : formatCompactTokens(value);
 }
@@ -487,4 +679,103 @@ function formatCompactTokens(value: number) {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
   if (value >= 1_000) return `${Math.round(value / 100) / 10}K`;
   return value.toString();
+}
+
+function normalizeTimelineView(value: string | undefined): TimelineView {
+  return value === "full" ? "full" : "prompts";
+}
+
+function groupPromptEpisodes(events: PromptEvent[]): PromptGroup[] {
+  const groups: PromptGroup[] = [];
+  let current: PromptGroup | null = null;
+
+  events.forEach((event) => {
+    if (event.kind === "message" && event.role === "user") {
+      if (isSessionBootstrapMessage(event.text)) {
+        return;
+      }
+
+      current = {
+        id: `${event.timestamp}-${groups.length}`,
+        startedAt: event.timestamp,
+        endedAt: event.timestamp,
+        userMessage: event.text,
+        assistantMessage: null,
+        tokenEvents: [],
+        aggregateUsage: null,
+      };
+      groups.push(current);
+      return;
+    }
+
+    if (!current) {
+      return;
+    }
+
+    if (event.timestamp) {
+      current.endedAt = event.timestamp;
+    }
+
+    if (event.kind === "message" && event.role === "assistant") {
+      current.assistantMessage = event.text;
+      return;
+    }
+
+    if (event.kind === "token_count") {
+      current.tokenEvents.push(event);
+      current.aggregateUsage = {
+        inputTokens: current.tokenEvents.reduce((sum, item) => sum + item.inputTokens, 0),
+        cachedInputTokens: current.tokenEvents.reduce((sum, item) => sum + item.cachedInputTokens, 0),
+        outputTokens: current.tokenEvents.reduce((sum, item) => sum + item.outputTokens, 0),
+        totalTokens: current.tokenEvents.reduce((sum, item) => sum + item.totalTokens, 0),
+      };
+    }
+  });
+
+  return groups;
+}
+
+function buildPromptCostChartData(groups: PromptGroup[], pricingProfile: TokenPricingProfile | null) {
+  let cumulativeCostUsd = 0;
+
+  return groups
+    .map((group, index) => {
+      const costUsd = group.aggregateUsage
+        ? estimateUsageCostUsd(
+            {
+              inputTokens: group.aggregateUsage.inputTokens,
+              cachedInputTokens: group.aggregateUsage.cachedInputTokens,
+              outputTokens: group.aggregateUsage.outputTokens,
+            },
+            pricingProfile
+          ) ?? 0
+        : 0;
+
+      cumulativeCostUsd += costUsd;
+
+      return {
+        id: group.id,
+        label: `P${index + 1}`,
+        startedAt: formatTime(group.startedAt),
+        promptPreview: truncatePromptPreview(group.userMessage),
+        costUsd,
+        cumulativeCostUsd,
+      };
+    })
+    .filter((point) => point.costUsd > 0 || point.cumulativeCostUsd > 0);
+}
+
+function isSessionBootstrapMessage(text: string) {
+  const normalized = text.trim();
+
+  return (
+    normalized.startsWith("# AGENTS.md instructions") ||
+    normalized.startsWith("<environment_context>") ||
+    normalized.includes("\n<environment_context>")
+  );
+}
+
+function truncatePromptPreview(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > 72 ? `${normalized.slice(0, 72)}...` : normalized;
 }

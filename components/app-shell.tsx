@@ -10,19 +10,19 @@ export function AppShell({
   children,
   title,
   eyebrow,
+  breadcrumbs,
   className,
   section = "dashboard",
   repoCount
 }: {
   children: React.ReactNode;
   title: string;
-  eyebrow: string;
+  eyebrow?: string;
+  breadcrumbs?: React.ReactNode;
   className?: string;
   section?: AppSection;
   repoCount?: number;
 }) {
-  const connectedReposLabel = typeof repoCount === "number" ? String(repoCount) : "Live";
-
   return (
     <main className={cn("min-h-screen bg-white text-foreground", className)}>
       <div className="flex min-h-screen">
@@ -42,29 +42,21 @@ export function AppShell({
           <div className="space-y-1 px-3 py-4">
             <NavItem href="/" icon={LayoutDashboard} label="Dashboard" active={section === "dashboard"} />
           </div>
-
-          <div className="mt-auto border-t border-border px-5 py-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Connected repos</p>
-            <p className="mt-2 text-2xl font-semibold leading-none">{connectedReposLabel}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {typeof repoCount === "number" ? "Repositories with reconstructed activity." : "Repositories under active retrospective scanning."}
-            </p>
-          </div>
         </aside>
 
         <div className="min-w-0 flex-1">
           <div className="mx-auto flex max-w-[1280px] flex-col gap-6 px-5 py-6 md:px-8">
             <header className="border-b border-border pb-5">
               <div className="space-y-3">
-                <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.26em] text-muted-foreground">
+                {breadcrumbs ? <div>{breadcrumbs}</div> : null}
+                {eyebrow ? (
+                  <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.26em] text-muted-foreground">
                     <ScanSearch className="h-3.5 w-3.5" />
                     {eyebrow}
-                </div>
+                  </div>
+                ) : null}
                 <div>
                   <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">{title}</h1>
-                  <p className="mt-2 max-w-3xl text-sm text-muted-foreground md:text-base">
-                    Track AI activity across repositories, prompts, and correlated commits.
-                  </p>
                 </div>
               </div>
             </header>
