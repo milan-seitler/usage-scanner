@@ -60,7 +60,7 @@ export default async function ProjectPage({
   return (
     <AppShell
       title={project.name}
-      subtitle="Recovered local prompts and commit activity for this repository."
+      subtitle={project.repoPath}
       section="project"
       repoCount={repoCount}
       breadcrumbs={
@@ -313,7 +313,7 @@ function fillDailyChartGaps(bucket: Map<string, { date: string; isoDate: string;
   }
 
   const days: Array<{ date: string; isoDate: string; inputTokens: number; outputTokens: number; costUsd: number }> = [];
-  const current = new Date(`${keys[0]}T00:00:00Z`);
+  let current = new Date(`${keys[0]}T00:00:00Z`);
   const end = new Date(`${keys[keys.length - 1]}T00:00:00Z`);
 
   while (current <= end) {

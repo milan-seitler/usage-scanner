@@ -47,9 +47,6 @@ export function AppShell({
           </div>
 
           <div className="mt-auto px-4 py-5">
-            {typeof repoCount === "number" ? (
-              <p className="mb-4 text-center text-xs text-muted-foreground">{repoCount} repos indexed</p>
-            ) : null}
             <div className="flex justify-center">
               <ThemeToggle />
             </div>
