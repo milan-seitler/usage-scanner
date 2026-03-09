@@ -62,6 +62,14 @@ REPO_SCANNER_CODEX_ROOT=/absolute/path/to/your/.codex
 REPO_SCANNER_CURSOR_WORKSPACES=/absolute/path/to/Cursor/User/workspaceStorage
 ```
 
+Typical macOS examples:
+
+```bash
+REPO_SCANNER_PROJECTS_ROOT=/Users/your-name/Developer/Projects
+REPO_SCANNER_CODEX_ROOT=/Users/your-name/.codex
+REPO_SCANNER_CURSOR_WORKSPACES=/Users/your-name/Library/Application Support/Cursor/User/workspaceStorage
+```
+
 3. If you want to try the experimental `Cursor Stats` route, also set:
 
 ```bash
@@ -87,12 +95,6 @@ npm install
 ```bash
 npm run build
 npm start
-```
-
-For local development:
-
-```bash
-npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
