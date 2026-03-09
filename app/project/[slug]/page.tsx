@@ -6,13 +6,14 @@ import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getProject } from "@/lib/data";
+import { getProject, getProjects } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProjectPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const project = getProject(slug);
+  const repoCount = getProjects().length;
 
   if (!project) {
     notFound();
@@ -23,7 +24,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   const hasCodexSource = project.scannerSources.some((source) => source.toLowerCase().includes("codex"));
 
   return (
-    <AppShell eyebrow="Project Drill-down" title={project.name}>
+    <AppShell eyebrow="Project Drill-down" title={project.name} section="project" repoCount={repoCount}>
       <section className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
         <Card className="overflow-hidden border-border/70 bg-white/90">
           <CardHeader className="gap-4 pb-4">

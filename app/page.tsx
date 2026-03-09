@@ -27,7 +27,7 @@ export default function HomePage() {
   );
 
   return (
-    <AppShell eyebrow="Retrospective Usage" title="AI spend by project, prompt, and commit">
+    <AppShell eyebrow="Retrospective Usage" title="AI spend by project, prompt, and commit" section="dashboard" repoCount={projects.length}>
       <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <Card className="overflow-hidden border-primary/10 bg-[linear-gradient(135deg,rgba(59,130,246,0.08),rgba(14,165,233,0.03))]">
           <CardHeader className="pb-3">

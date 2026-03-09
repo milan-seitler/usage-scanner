@@ -3,17 +3,25 @@ import { FolderGit2, LayoutDashboard, Search, ScanSearch, Sparkles, Waypoints } 
 
 import { cn } from "@/lib/utils";
 
+type AppSection = "dashboard" | "project" | "prompt";
+
 export function AppShell({
   children,
   title,
   eyebrow,
-  className
+  className,
+  section = "dashboard",
+  repoCount
 }: {
   children: React.ReactNode;
   title: string;
   eyebrow: string;
   className?: string;
+  section?: AppSection;
+  repoCount?: number;
 }) {
+  const connectedReposLabel = typeof repoCount === "number" ? String(repoCount) : "Live";
+
   return (
     <main className={cn("min-h-screen", className)}>
       <div className="mx-auto flex max-w-[1600px] gap-6 px-4 py-4 md:px-6 lg:px-8">
@@ -29,9 +37,9 @@ export function AppShell({
           </div>
 
           <div className="mt-6 space-y-1">
-            <NavItem href="/" icon={LayoutDashboard} label="Dashboard" active />
-            <NavGhost icon={Waypoints} label="Project Drilldowns" />
-            <NavGhost icon={Sparkles} label="Prompt Timelines" />
+            <NavItem href="/" icon={LayoutDashboard} label="Dashboard" active={section === "dashboard"} />
+            <NavGhost icon={Waypoints} label="Project Drilldowns" active={section === "project"} />
+            <NavGhost icon={Sparkles} label="Prompt Timelines" active={section === "prompt"} />
           </div>
 
           <div className="mt-8 rounded-2xl border border-border/70 bg-muted/40 p-4">
@@ -48,8 +56,12 @@ export function AppShell({
               <FolderGit2 className="h-3.5 w-3.5" />
               Connected repos
             </div>
-            <p className="mt-3 text-3xl font-semibold leading-none">10</p>
-            <p className="mt-2 text-sm text-slate-300">Projects under active retrospective scanning.</p>
+            <p className="mt-3 text-3xl font-semibold leading-none">{connectedReposLabel}</p>
+            <p className="mt-2 text-sm text-slate-300">
+              {typeof repoCount === "number"
+                ? "Repositories with reconstructed prompt or commit activity."
+                : "Repositories under active retrospective scanning."}
+            </p>
           </div>
         </aside>
 
@@ -123,13 +135,20 @@ function NavItem({
 
 function NavGhost({
   icon: Icon,
-  label
+  label,
+  active
 }: {
   icon: typeof LayoutDashboard;
   label: string;
+  active?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground">
+    <div
+      className={cn(
+        "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium",
+        active ? "bg-muted/70 text-foreground" : "text-muted-foreground"
+      )}
+    >
       <Icon className="h-4 w-4" />
       {label}
     </div>

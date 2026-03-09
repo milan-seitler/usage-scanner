@@ -5,7 +5,7 @@ import { ArrowLeft, Files, GitBranch, GitCommitHorizontal, MessagesSquare } from
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getCommitDetail } from "@/lib/data";
+import { getCommitDetail, getProjects } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,7 @@ export default async function CommitDetailPage({
 }) {
   const { slug, commitId } = await params;
   const detail = getCommitDetail(slug, commitId);
+  const repoCount = getProjects().length;
 
   if (!detail) {
     notFound();
@@ -26,7 +27,7 @@ export default async function CommitDetailPage({
   const unknownPromptCount = prompts.filter((prompt) => prompt.totalTokens == null).length;
 
   return (
-    <AppShell eyebrow="Commit Detail" title={commit.message}>
+    <AppShell eyebrow="Commit Detail" title={commit.message} section="project" repoCount={repoCount}>
       <section className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
         <Card className="overflow-hidden border-border/70 bg-white/90">
           <CardHeader className="gap-4 pb-4">
