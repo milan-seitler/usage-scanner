@@ -113,9 +113,9 @@ type CodexSessionDetail = {
   events: PromptEvent[];
 };
 
-export type PromptEfficiencyEpisode = {
+export type PromptTimelineItem = {
   id: string;
-  kind: "user_turn" | "investigation" | "implementation";
+  kind: "message" | "assistant_work" | "token_checkpoint";
   title: string;
   subtitle: string;
   timestamp: string;
@@ -125,6 +125,14 @@ export type PromptEfficiencyEpisode = {
   estimatedOutputTokens: number;
   estimatedTotalTokens: number;
   rawEvents: PromptEvent[];
+};
+
+export type PromptTokenCheckpoint = {
+  timestamp: string;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
 };
 
 export type PromptEfficiencyOverview = {
@@ -287,96 +295,74 @@ function scanCodexSessions(projectMap: Map<string, MutableProject>) {
 }
 
 function derivePromptEfficiency(events: PromptEvent[]) {
-  const episodes: PromptEfficiencyEpisode[] = [];
-  let currentWorkEpisode: PromptEfficiencyEpisode | null = null;
+  const items: PromptTimelineItem[] = [];
+  const checkpoints: PromptTokenCheckpoint[] = [];
   let checkpointTotals = { input: 0, output: 0, total: 0 };
 
-  const flushCurrentWorkEpisode = () => {
-    if (!currentWorkEpisode) return;
-    finalizeEpisode(currentWorkEpisode);
-    episodes.push(currentWorkEpisode);
-    currentWorkEpisode = null;
-  };
-
   events.forEach((event) => {
-    if (event.kind === "message" && event.role === "user") {
-      flushCurrentWorkEpisode();
-      episodes.push({
-        id: `${event.timestamp}-user`,
-        kind: "user_turn",
-        title: "User turn",
-        subtitle: summarizeText(event.text),
-        timestamp: event.timestamp,
-        signal: "Decision request or clarification before more work.",
-        tokenHint: "~0 minimal",
-        estimatedInputTokens: 0,
-        estimatedOutputTokens: 0,
-        estimatedTotalTokens: 0,
-        rawEvents: [event],
-      });
-      return;
-    }
-
-    if (!currentWorkEpisode) {
-      currentWorkEpisode = {
-        id: `${event.timestamp}-work`,
-        kind: classifyWorkEpisode(event),
-        title: classifyWorkEpisode(event) === "implementation" ? "Assistant work: implementation" : "Assistant work: investigation",
-        subtitle:
-          classifyWorkEpisode(event) === "implementation"
-            ? "Execution after direction was chosen"
-            : "Diagnosis and repo inspection",
-        timestamp: event.timestamp,
-        signal: "",
-        tokenHint: "~0 minimal",
-        estimatedInputTokens: 0,
-        estimatedOutputTokens: 0,
-        estimatedTotalTokens: 0,
-        rawEvents: [],
-      };
-    }
-
-    currentWorkEpisode.rawEvents.push(event);
-
     if (event.kind === "token_count") {
       const deltaInput = Math.max(0, event.inputTokens - checkpointTotals.input);
       const deltaOutput = Math.max(0, event.outputTokens - checkpointTotals.output);
       const deltaTotal = Math.max(0, event.totalTokens - checkpointTotals.total);
 
-      currentWorkEpisode.estimatedInputTokens += deltaInput;
-      currentWorkEpisode.estimatedOutputTokens += deltaOutput;
-      currentWorkEpisode.estimatedTotalTokens += deltaTotal;
+      checkpoints.push({
+        timestamp: event.timestamp,
+        inputTokens: event.inputTokens,
+        cachedInputTokens: event.cachedInputTokens,
+        outputTokens: event.outputTokens,
+        totalTokens: event.totalTokens,
+      });
+
+      items.push({
+        id: `${event.timestamp}-token`,
+        kind: "token_checkpoint",
+        title: "Token checkpoint",
+        subtitle: "Cumulative session usage snapshot",
+        timestamp: event.timestamp,
+        signal: `Total ${formatCompactTokenCount(event.totalTokens)} after +${formatCompactTokenCount(deltaTotal)} new tokens.`,
+        tokenHint: `${formatCompactTokenCount(event.totalTokens)} total`,
+        estimatedInputTokens: deltaInput,
+        estimatedOutputTokens: deltaOutput,
+        estimatedTotalTokens: deltaTotal,
+        rawEvents: [event],
+      });
 
       checkpointTotals = {
         input: event.inputTokens,
         output: event.outputTokens,
         total: event.totalTokens,
       };
+      return;
+    }
+
+    const item = toTimelineItem(event);
+    if (item) {
+      items.push(item);
     }
   });
 
-  flushCurrentWorkEpisode();
+  items.forEach(finalizeTimelineItem);
 
-  const workEpisodes = episodes.filter((episode) => episode.kind !== "user_turn");
-  const mostExpensiveEpisode = workEpisodes.reduce<PromptEfficiencyEpisode | null>((current, episode) => {
-    if (!current) return episode;
-    return episode.estimatedTotalTokens > current.estimatedTotalTokens ? episode : current;
+  const costlyItems = items.filter((item) => item.kind === "assistant_work");
+  const mostExpensiveEpisode = costlyItems.reduce<PromptTimelineItem | null>((current, item) => {
+    if (!current) return item;
+    return item.estimatedTotalTokens > current.estimatedTotalTokens ? item : current;
   }, null);
 
   const overview: PromptEfficiencyOverview = {
-    totalEstimatedTokens: workEpisodes.reduce((sum, episode) => sum + episode.estimatedTotalTokens, 0),
+    totalEstimatedTokens: costlyItems.reduce((sum, item) => sum + item.estimatedTotalTokens, 0),
     wasteSignal: mostExpensiveEpisode
-      ? mostExpensiveEpisode.kind === "investigation" && mostExpensiveEpisode.estimatedInputTokens >= mostExpensiveEpisode.estimatedOutputTokens
+      ? mostExpensiveEpisode.subtitle.toLowerCase().includes("investigation") && mostExpensiveEpisode.estimatedInputTokens >= mostExpensiveEpisode.estimatedOutputTokens
         ? "High input before edits"
         : "Heavy work episode"
       : "No strong waste signal",
     likelyCause: mostExpensiveEpisode
-      ? mostExpensiveEpisode.kind === "investigation"
+      ? mostExpensiveEpisode.subtitle.toLowerCase().includes("investigation")
         ? "Repeated inspection and restatement before implementation."
         : "Implementation work carried both context load and execution."
       : "Limited detailed event evidence.",
     howToReduceNextTime: mostExpensiveEpisode
-      ? mostExpensiveEpisode.kind === "investigation"
+      ? mostExpensiveEpisode.subtitle.toLowerCase().includes("investigation")
         ? "Ask for a short diagnosis first, then approve implementation in a second turn."
         : "Constrain the implementation target and expected diff before the assistant starts coding."
       : "Keep the ask narrow and avoid broad exploratory prompts.",
@@ -387,37 +373,80 @@ function derivePromptEfficiency(events: PromptEvent[]) {
     ],
   };
 
-  return { overview, episodes: episodes.slice().sort((a, b) => b.timestamp.localeCompare(a.timestamp)) };
+  return {
+    overview,
+    items: items.slice().sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
+    checkpoints: checkpoints.slice().sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
+  };
 }
 
-function classifyWorkEpisode(event: PromptEvent) {
-  if (event.kind === "tool_call") {
-    const tool = event.toolName.toLowerCase();
-    if (/(write|edit|patch|apply|save|replace|create|delete|move|set)/.test(tool)) {
-      return "implementation" as const;
+function toTimelineItem(event: PromptEvent): PromptTimelineItem | null {
+  if (event.kind === "message") {
+    if (event.role === "user") {
+      return {
+        id: `${event.timestamp}-message`,
+        kind: "message",
+        title: "User turn",
+        subtitle: summarizeText(event.text),
+        timestamp: event.timestamp,
+        signal: "Decision request or clarification before more work.",
+        tokenHint: "~0 minimal",
+        estimatedInputTokens: 0,
+        estimatedOutputTokens: 0,
+        estimatedTotalTokens: 0,
+        rawEvents: [event],
+      };
     }
+
+    return {
+      id: `${event.timestamp}-assistant`,
+      kind: "assistant_work",
+      title: "Assistant work - message",
+      subtitle: inferAssistantSubtitle(event.text),
+      timestamp: event.timestamp,
+      signal: "",
+      tokenHint: "~0 minimal",
+      estimatedInputTokens: 0,
+      estimatedOutputTokens: 0,
+      estimatedTotalTokens: 0,
+      rawEvents: [event],
+    };
   }
 
-  return "investigation" as const;
+  if (event.kind === "tool_call" || event.kind === "tool_output") {
+    return {
+      id: `${event.timestamp}-${event.kind}`,
+      kind: "assistant_work",
+      title: `Assistant work - ${event.kind.replace("_", " ")}`,
+      subtitle: classifyToolSubtitle(event.toolName),
+      timestamp: event.timestamp,
+      signal: "",
+      tokenHint: "~0 minimal",
+      estimatedInputTokens: 0,
+      estimatedOutputTokens: 0,
+      estimatedTotalTokens: 0,
+      rawEvents: [event],
+    };
+  }
+
+  return null;
 }
 
-function finalizeEpisode(episode: PromptEfficiencyEpisode) {
-  if (episode.kind === "user_turn") {
-    return;
-  }
+function finalizeTimelineItem(item: PromptTimelineItem) {
+  if (item.kind === "message" || item.kind === "token_checkpoint") return;
 
-  const mostlyInput = episode.estimatedInputTokens > episode.estimatedOutputTokens * 1.6;
-  const hintPrefix = episode.estimatedTotalTokens > 0 ? formatCompactTokenCount(episode.estimatedTotalTokens) : "~0";
+  const mostlyInput = item.estimatedInputTokens > item.estimatedOutputTokens * 1.6;
+  const hintPrefix = item.estimatedTotalTokens > 0 ? formatCompactTokenCount(item.estimatedTotalTokens) : "~0";
 
-  episode.tokenHint =
-    episode.estimatedTotalTokens === 0
+  item.tokenHint =
+    item.estimatedTotalTokens === 0
       ? "~0 minimal"
       : mostlyInput
         ? `${hintPrefix} mostly input`
         : `${hintPrefix} mixed`;
 
-  episode.signal =
-    episode.kind === "investigation"
+  item.signal =
+    item.subtitle.toLowerCase().includes("investigation")
       ? mostlyInput
         ? "Low efficiency: heavy context load before a small structural conclusion."
         : "Useful diagnosis, but still mostly exploratory token spend."
@@ -429,6 +458,24 @@ function finalizeEpisode(episode: PromptEfficiencyEpisode) {
 function summarizeText(text: string) {
   const normalized = text.replace(/\s+/g, " ").trim();
   return normalized.length > 64 ? `${normalized.slice(0, 63)}…` : normalized;
+}
+
+function inferAssistantSubtitle(text: string) {
+  const normalized = text.toLowerCase();
+  if (/(implement|change|update|patch|build|apply|replace|refactor)/.test(normalized)) {
+    return "Implementation";
+  }
+
+  return "Investigation";
+}
+
+function classifyToolSubtitle(toolName: string) {
+  const normalized = toolName.toLowerCase();
+  if (/(apply_patch|write|edit|replace|create|save|set|delete|move)/.test(normalized)) {
+    return "Implementation";
+  }
+
+  return "Investigation";
 }
 
 function formatCompactTokenCount(value: number) {

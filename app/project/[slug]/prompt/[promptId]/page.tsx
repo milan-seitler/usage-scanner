@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getProjects, getPromptDetail, type PromptEfficiencyEpisode, type PromptEvent } from "@/lib/data";
+import { getProjects, getPromptDetail, type PromptEvent, type PromptTimelineItem } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -68,9 +68,8 @@ export default async function PromptDetailPage({
             {efficiency ? (
               <>
                 <EfficiencyOverview overview={efficiency.overview} />
-                {efficiency.episodes.map((episode) => (
-                  <TimelineEpisodeRow key={episode.id} episode={episode} />
-                ))}
+                {efficiency.items.map((item) => <TimelineItemRow key={item.id} item={item} />)}
+                <RawCheckpointPanel checkpoints={efficiency.checkpoints} />
               </>
             ) : prompt.source === "Codex" && codexDetail ? (
               codexDetail.events.length > 0 ? (
@@ -165,40 +164,129 @@ function OverviewStat({ title, value, text }: { title: string; value: string; te
   );
 }
 
-function TimelineEpisodeRow({ episode }: { episode: PromptEfficiencyEpisode }) {
-  const badgeVariant = episode.kind === "user_turn" ? "secondary" : episode.kind === "investigation" ? "outline" : "default";
+function TimelineItemRow({ item }: { item: PromptTimelineItem }) {
+  if (item.kind === "token_checkpoint") {
+    return <TokenCheckpointRow item={item} />;
+  }
+
+  const actionType = getActionType(item);
+  const title = item.kind === "message" ? item.subtitle : item.title;
 
   return (
-    <details className="group rounded-xl border border-border bg-white">
+    <details className={`group rounded-xl border ${item.kind === "message" ? "border-emerald-200 bg-emerald-50/60" : "border-border bg-white"}`}>
       <summary className="cursor-pointer list-none p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">{episode.title}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{episode.subtitle}</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${actionType.dotClassName}`} />
+            <p className="truncate text-sm font-medium text-foreground">{title}</p>
           </div>
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition group-open:rotate-180" />
-        </div>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <p className={`min-w-0 text-sm ${episode.kind === "investigation" ? "text-amber-700" : "text-slate-600"}`}>{episode.signal}</p>
           <div className="flex shrink-0 items-center gap-2">
-            <Badge variant={badgeVariant}>{episode.tokenHint}</Badge>
-            <p className="text-xs font-medium text-foreground">{formatTime(episode.timestamp)}</p>
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${actionType.labelClassName}`}>{actionType.label}</span>
+            <p className="text-xs font-medium text-foreground">{formatTime(item.timestamp)}</p>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" />
           </div>
         </div>
       </summary>
       <div className="border-t border-border px-4 py-4">
         <div className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">{episode.kind.replace("_", " ")}</Badge>
-            <Badge variant="secondary">{formatCompactTokens(episode.estimatedInputTokens)} input</Badge>
-            <Badge variant="secondary">{formatCompactTokens(episode.estimatedOutputTokens)} output</Badge>
-            <Badge variant="secondary">{formatCompactTokens(episode.estimatedTotalTokens)} total</Badge>
+          {item.rawEvents.map((event, index) => (
+            <RawEvidence key={`${item.id}-${index}`} event={event} />
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function TokenCheckpointRow({ item }: { item: PromptTimelineItem }) {
+  const checkpoint = item.rawEvents[0]?.kind === "token_count" ? item.rawEvents[0] : null;
+  const inlineCount = checkpoint
+    ? `+${formatCompactTokens(item.estimatedInputTokens)}/+${formatCompactTokens(item.estimatedOutputTokens)} (${formatCompactTokens(checkpoint.inputTokens)}/${formatCompactTokens(checkpoint.outputTokens)})`
+    : `+${formatCompactTokens(item.estimatedInputTokens)}/+${formatCompactTokens(item.estimatedOutputTokens)}`;
+
+  return (
+    <details className="group rounded-xl border border-border bg-white">
+      <summary className="cursor-pointer list-none p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-slate-400" />
+            <p className="truncate text-sm font-medium text-foreground">Token checkpoint {inlineCount}</p>
           </div>
-          <div className="space-y-3">
-            {episode.rawEvents.map((event, index) => (
-              <RawEvidence key={`${episode.id}-${index}`} event={event} />
-            ))}
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">tokens</span>
+            <p className="text-xs font-medium text-foreground">{formatTime(item.timestamp)}</p>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" />
           </div>
+        </div>
+      </summary>
+      <div className="border-t border-border px-4 py-4">
+        {item.rawEvents.map((event, index) => (
+          <RawEvidence key={`${item.id}-${index}`} event={event} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function getActionType(item: PromptTimelineItem) {
+  if (item.kind === "message") {
+    return {
+      label: "user",
+      dotClassName: "bg-emerald-500",
+      labelClassName: "bg-emerald-50 text-emerald-700"
+    };
+  }
+
+  if (item.subtitle.toLowerCase().includes("investigation")) {
+    return {
+      label: "investigation",
+      dotClassName: "bg-amber-500",
+      labelClassName: "bg-amber-50 text-amber-700"
+    };
+  }
+
+  return {
+    label: "implementation",
+    dotClassName: "bg-blue-500",
+    labelClassName: "bg-blue-50 text-blue-700"
+  };
+}
+
+function RawCheckpointPanel({
+  checkpoints
+}: {
+  checkpoints: Array<{
+    timestamp: string;
+    inputTokens: number;
+    cachedInputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  }>;
+}) {
+  return (
+    <details className="group rounded-xl border border-dashed border-border bg-white">
+      <summary className="cursor-pointer list-none p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Raw token checkpoints</p>
+            <p className="mt-1 text-xs text-muted-foreground">Cumulative token snapshots from the underlying session log.</p>
+          </div>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition group-open:rotate-180" />
+        </div>
+      </summary>
+      <div className="border-t border-border px-4 py-4">
+        <div className="space-y-2">
+          {checkpoints.map((checkpoint) => (
+            <div key={`${checkpoint.timestamp}-${checkpoint.totalTokens}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-slate-50 px-3 py-2">
+              <p className="text-xs font-medium text-foreground">{formatTime(checkpoint.timestamp)}</p>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline">{formatCompactTokens(checkpoint.inputTokens)} input</Badge>
+                <Badge variant="outline">{formatCompactTokens(checkpoint.cachedInputTokens)} cached</Badge>
+                <Badge variant="outline">{formatCompactTokens(checkpoint.outputTokens)} output</Badge>
+                <Badge variant="secondary">{formatCompactTokens(checkpoint.totalTokens)} total</Badge>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </details>
