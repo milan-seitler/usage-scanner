@@ -4,7 +4,7 @@ import { LayoutDashboard, ScanSearch } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type AppSection = "dashboard" | "project" | "prompt";
+type AppSection = "dashboard" | "project" | "prompt" | "cursor";
 
 export function AppShell({
   children,

@@ -16,6 +16,10 @@ The current app reads from:
 - Cursor workspace history in `~/Library/Application Support/Cursor/User/workspaceStorage`
 - Git repositories under `/Users/your-name/Developer/Projects`
 
+Optional:
+
+- Cursor Admin API usage events for a hidden `Cursor Stats` scaffold when `CURSOR_ADMIN_API_KEY` is configured
+
 ## Current behavior
 
 - Project dashboard with known token totals and source visibility
@@ -61,6 +65,19 @@ Important:
 - cost estimates only use profiles that have been mapped locally in `lib/pricing.ts`
 
 ## Run locally
+
+Optional env for `Cursor Stats`:
+
+```bash
+export CURSOR_ADMIN_API_KEY=...
+export CURSOR_TEAM_ID=...
+export CURSOR_STATS_LOOKBACK_DAYS=30
+```
+
+Note:
+
+- The `Cursor Stats` route is intentionally not linked from the UI yet.
+- It is kept in the codebase as a hidden MVP scaffold and is blocked on a real Cursor Admin API key from a team admin.
 
 Install dependencies:
 
