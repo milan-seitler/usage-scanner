@@ -1,19 +1,11 @@
-import Link from "next/link";
+import { ChevronDown, Wrench } from "lucide-react";
 import { notFound } from "next/navigation";
-import {
-  ArrowLeft,
-  Bot,
-  ChevronDown,
-  DollarSign,
-  FolderGit2,
-  GitCommitHorizontal,
-  Wrench
-} from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getProjects, getPromptDetail, type PromptEvent } from "@/lib/data";
+import { getProjects, getPromptDetail, type PromptEfficiencyEpisode, type PromptEvent } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -30,140 +22,64 @@ export default async function PromptDetailPage({
     notFound();
   }
 
-  const { project, prompt, commit, codexDetail } = detail;
+  const { project, prompt, commit, codexDetail, efficiency } = detail;
 
   return (
     <AppShell eyebrow="Prompt Detail" title={prompt.title} section="prompt" repoCount={repoCount}>
-      <section className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
-        <Card className="overflow-hidden border-border/70 bg-white/90">
-          <CardHeader className="gap-4 pb-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground"
-                  href={`/project/${project.slug}`}
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Back to project
-                </Link>
-                <Badge variant="outline">{prompt.source}</Badge>
-                <Badge variant="secondary">{prompt.model}</Badge>
-              </div>
-              <div className="text-sm text-muted-foreground">{formatDate(prompt.startedAt)}</div>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-              <div>
-                <CardTitle className="text-2xl">Session overview</CardTitle>
-                <CardDescription className="mt-2 max-w-2xl">
-                  Inspect the actual prompt, the tool activity around it, and the commit it likely fed into.
-                </CardDescription>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-muted/25 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Summary</p>
-                <p className="mt-2 text-sm leading-6 text-foreground">{prompt.summary}</p>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-4">
-            <InfoStrip icon={Bot} label="Model" value={prompt.model} />
-            <InfoStrip icon={DollarSign} label="Known tokens" value={prompt.totalTokens != null ? prompt.totalTokens.toLocaleString() : "Unavailable"} />
-            <InfoStrip icon={FolderGit2} label="Repo" value={project.name} />
-            <InfoStrip icon={GitCommitHorizontal} label="Linked commit" value={commit?.id ?? "None"} />
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70 bg-white/85">
-          <CardHeader>
-            <CardTitle className="text-lg">What this page proves</CardTitle>
-            <CardDescription>The dashboard should stay explainable down to a single session.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <ReadingChip label="Transcript" value={prompt.source === "Codex" ? "event-level" : "summary-level"} />
-            <ReadingChip label="Tool trace" value={prompt.source === "Codex" ? "available" : "not exposed"} />
-            <ReadingChip label="Token accounting" value={prompt.totalTokens != null ? "known" : "unavailable"} />
-            <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-              {prompt.source === "Codex"
-                ? "This session is detailed enough to read like a real assistant timeline rather than a billing row."
-                : "Cursor currently contributes a thinner historical trace on this machine, so this page stays honest about the missing depth."}
-            </div>
-          </CardContent>
-        </Card>
+      <section className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <p className="max-w-3xl text-sm text-muted-foreground">
+              Prompt detail view for one session, tied back to repo, tokens, and commit outcome.
+            </p>
+          </div>
+          <Button href={`/project/${project.slug}`} variant="outline">
+            Back to project
+          </Button>
+        </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-        <Card className="border-border/70 bg-white/90">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <PlainStatCard label="Model" value={prompt.model} meta="codex" />
+        <PlainStatCard label="Known tokens" value={prompt.totalTokens != null ? formatCompactTokens(prompt.totalTokens) : "n/a"} meta="total" />
+        <PlainStatCard label="Started" value={formatTime(prompt.startedAt)} meta="today" />
+        <PlainStatCard label="Linked commit" value={commit?.id ?? "None"} meta={commit ? "yes" : "no"} />
+      </section>
+
+      <section className="grid gap-6">
+        <Card className="border-border bg-white shadow-none">
           <CardHeader>
             <CardTitle>Recovered session metadata</CardTitle>
-            <CardDescription>This is the level you’d get from local IDE databases or agent logs.</CardDescription>
+            <CardDescription>This is the level recovered from local IDE databases and agent logs.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            <DataBlock label="Started">{formatDate(prompt.startedAt)}</DataBlock>
-            <DataBlock label="Input tokens">{renderNumber(prompt.inputTokens)}</DataBlock>
-            <DataBlock label="Output tokens">{renderNumber(prompt.outputTokens)}</DataBlock>
-            <DataBlock label="Total tokens">{renderNumber(prompt.totalTokens)}</DataBlock>
-            <DataBlock label="Cached input">{renderNumber(prompt.cachedInputTokens)}</DataBlock>
-            <DataBlock label="Repo path">{prompt.repoPath}</DataBlock>
-            <DataBlock label="Prompt id">{prompt.id}</DataBlock>
+          <CardContent className="grid gap-3 md:grid-cols-3 pt-0">
+            <MiniMetaCard label="Input tokens" value={renderNumber(prompt.inputTokens)} state="known" />
+            <MiniMetaCard label="Output tokens" value={renderNumber(prompt.outputTokens)} state="known" />
+            <MiniMetaCard label="Cached input" value={renderNumber(prompt.cachedInputTokens)} state={prompt.cachedInputTokens != null ? "partial" : "none"} />
           </CardContent>
         </Card>
 
-        <Card className="border-border/70 bg-white/85">
+        <Card className="border-border bg-white shadow-none">
           <CardHeader>
-            <CardTitle>Correlation summary</CardTitle>
-            <CardDescription>Spend is only useful when it can be tied back to delivered work.</CardDescription>
+            <CardTitle>Session timeline</CardTitle>
+            <CardDescription>Grouped into work episodes, then reframed around efficiency diagnosis and savings opportunities.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {commit ? (
-              <div className="rounded-2xl border border-border/80 bg-background/85 p-4">
-                <p className="text-sm font-medium">{commit.message}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Committed {formatDate(commit.committedAt)} on {commit.branch}
-                </p>
-                <Link className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary" href={`/project/${project.slug}/commit/${commit.id}`}>
-                  Open commit detail
-                  <ChevronDown className="-rotate-90 h-4 w-4" />
-                </Link>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No correlated commit yet. In a real scanner pass, this would remain unmatched until a nearby Git event is found.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
-
-      <section>
-        <Card className="border-border/70 bg-white/90">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <CardTitle>Session timeline</CardTitle>
-                <CardDescription>
-                  {prompt.source === "Codex"
-                    ? "Raw local event stream for this Codex session: messages, tool calls, tool outputs, and token-count checkpoints."
-                    : "Cursor currently exposes prompt history on this machine, but not the full per-event tool and response timeline."}
-                </CardDescription>
-              </div>
-              <Badge variant="secondary">{prompt.source === "Codex" ? "expandable log" : "metadata only"}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {prompt.source === "Codex" && codexDetail ? (
+          <CardContent className="space-y-4 pt-0">
+            {efficiency ? (
+              <>
+                <EfficiencyOverview overview={efficiency.overview} />
+                {efficiency.episodes.map((episode) => (
+                  <TimelineEpisodeRow key={episode.id} episode={episode} />
+                ))}
+              </>
+            ) : prompt.source === "Codex" && codexDetail ? (
               codexDetail.events.length > 0 ? (
-                <div className="relative pl-6">
-                  <div className="absolute bottom-0 left-[11px] top-0 w-px bg-border/80" />
-                  <div className="space-y-4">
-                    {codexDetail.events.map((event, index) => (
-                      <TimelineEvent key={`${event.timestamp}-${index}`} event={event} />
-                    ))}
-                  </div>
-                </div>
+                codexDetail.events.map((event, index) => <LegacyTimelineRow key={`${event.timestamp}-${index}`} event={event} />)
               ) : (
-                <EmptyTimeline text="No detailed events were found for this Codex session." />
+                <EmptyState text="No detailed events were found for this Codex session." />
               )
             ) : (
-              <EmptyTimeline text="Full transcript detail is not available from the current Cursor workspace data shape. This page shows the prompt-level metadata that is available." />
+              <EmptyState text="Full transcript detail is not available from the current Cursor workspace data shape." />
             )}
           </CardContent>
         </Card>
@@ -172,230 +88,253 @@ export default async function PromptDetailPage({
   );
 }
 
-function InfoStrip({
-  icon: Icon,
-  label,
-  value
+function PlainStatCard({ label, value, meta }: { label: string; value: string; meta: string }) {
+  return (
+    <Card className="border-border bg-white shadow-none">
+      <CardHeader className="gap-1 pb-2">
+        <CardDescription className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</CardDescription>
+        <CardTitle className="text-2xl">{value}</CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <p className="text-xs text-muted-foreground">{meta}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MiniMetaCard({ label, value, state }: { label: string; value: string; state: string }) {
+  return (
+    <Card className="border-border bg-white shadow-none">
+      <CardHeader className="gap-1 pb-1">
+        <CardDescription className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</CardDescription>
+        <CardTitle className="text-xl">{value}</CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <p className="text-xs text-muted-foreground">{state}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EfficiencyOverview({
+  overview
 }: {
-  icon: typeof Bot;
-  label: string;
-  value: string;
+  overview: {
+    totalEstimatedTokens: number;
+    wasteSignal: string;
+    likelyCause: string;
+    howToReduceNextTime: string;
+    savingsOpportunities: string[];
+  };
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
-      <div className="flex items-center gap-3">
-        <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-          <Icon className="h-5 w-5 text-primary" />
+    <div className="space-y-3 rounded-xl border border-border bg-slate-50 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Token efficiency</p>
+          <p className="text-xs text-muted-foreground">Estimated from grouped session episodes and nearby token checkpoints.</p>
         </div>
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-          <p className="mt-1 truncate text-lg font-semibold">{value}</p>
+        <Badge variant="secondary">{formatCompactTokens(overview.totalEstimatedTokens)} total</Badge>
+      </div>
+      <div className="grid gap-3 md:grid-cols-[220px_220px_1fr]">
+        <OverviewStat title="Likely waste signal" value={overview.wasteSignal} text="Estimated source of avoidable token spend." />
+        <OverviewStat title="Estimated cause" value={overview.likelyCause} text="Best-effort diagnosis from grouped episodes." />
+        <OverviewStat title="Suggested next change" value={overview.howToReduceNextTime} text="Recommended prompt/process adjustment." />
+      </div>
+      <div className="rounded-lg border border-border bg-white p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Savings opportunities</p>
+        <div className="mt-2 space-y-1.5 text-sm text-slate-600">
+          {overview.savingsOpportunities.map((item, index) => (
+            <p key={item}>
+              {index + 1}. {item}
+            </p>
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
-function DataBlock({ label, children }: { label: string; children: React.ReactNode }) {
+function OverviewStat({ title, value, text }: { title: string; value: string; text: string }) {
   return (
-    <div className="rounded-2xl bg-muted/45 p-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-sm font-medium">{children}</p>
+    <div className="rounded-lg border border-border bg-white p-3">
+      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
+      <p className="mt-2 text-sm font-semibold text-foreground">{value}</p>
+      <p className="mt-1 text-xs text-slate-600">{text}</p>
     </div>
   );
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(new Date(value));
-}
-
-function renderNumber(value: number | null) {
-  return value == null ? "Unavailable" : value.toLocaleString();
-}
-
-function TimelineEvent({ event }: { event: PromptEvent }) {
-  const meta = getEventMeta(event);
-
-  if (event.kind === "message") {
-    return (
-      <TimelineDisclosure
-        badgeVariant={event.role === "user" ? "default" : "secondary"}
-        dotClassName={meta.dotClassName}
-        label={meta.label}
-        preview={truncate(event.text, 220)}
-        timestamp={event.timestamp}
-      >
-        <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{event.text}</pre>
-      </TimelineDisclosure>
-    );
-  }
-
-  if (event.kind === "token_count") {
-    return (
-      <TimelineDisclosure
-        badgeVariant="outline"
-        dotClassName={meta.dotClassName}
-        label={meta.label}
-        preview={`${event.totalTokens.toLocaleString()} total, ${event.inputTokens.toLocaleString()} input, ${event.outputTokens.toLocaleString()} output`}
-        timestamp={event.timestamp}
-      >
-        <div className="grid gap-3 md:grid-cols-4">
-          <MetricMini label="Input" value={event.inputTokens.toLocaleString()} />
-          <MetricMini label="Cached" value={event.cachedInputTokens.toLocaleString()} />
-          <MetricMini label="Output" value={event.outputTokens.toLocaleString()} />
-          <MetricMini label="Total" value={event.totalTokens.toLocaleString()} />
-        </div>
-      </TimelineDisclosure>
-    );
-  }
-
-  if (event.kind === "tool_call") {
-    return (
-      <TimelineDisclosure
-        badgeVariant="outline"
-        dotClassName={meta.dotClassName}
-        label={meta.label}
-        sublabel={event.toolName}
-        preview={truncate(event.argumentsText || "No arguments captured", 220)}
-        timestamp={event.timestamp}
-      >
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Wrench className="h-4 w-4" />
-          <span>Status: {event.status}</span>
-          {event.callId ? <span>Call: {event.callId}</span> : null}
-        </div>
-        {event.argumentsText ? (
-          <pre className="mt-3 overflow-x-auto rounded-xl bg-muted/50 p-3 text-xs leading-5 text-foreground">
-            {event.argumentsText}
-          </pre>
-        ) : null}
-      </TimelineDisclosure>
-    );
-  }
+function TimelineEpisodeRow({ episode }: { episode: PromptEfficiencyEpisode }) {
+  const badgeVariant = episode.kind === "user_turn" ? "secondary" : episode.kind === "investigation" ? "outline" : "default";
 
   return (
-    <TimelineDisclosure
-      badgeVariant="outline"
-      dotClassName={meta.dotClassName}
-      label={meta.label}
-      sublabel={event.toolName}
-      preview={truncate(event.outputText || "No output captured", 220)}
-      timestamp={event.timestamp}
-    >
-      {event.callId ? <p className="mt-2 text-xs text-muted-foreground">Call: {event.callId}</p> : null}
-      <pre className="mt-3 overflow-x-auto rounded-xl bg-muted/50 p-3 text-xs leading-5 text-foreground">
-        {event.outputText}
-      </pre>
-    </TimelineDisclosure>
-  );
-}
-
-function TimelineDisclosure({
-  badgeVariant,
-  children,
-  dotClassName,
-  label,
-  preview,
-  sublabel,
-  timestamp
-}: {
-  badgeVariant: "default" | "secondary" | "outline";
-  children: React.ReactNode;
-  dotClassName: string;
-  label: string;
-  preview: string;
-  sublabel?: string;
-  timestamp: string;
-}) {
-  return (
-    <details className="group relative">
-      <summary className="list-none">
-        <div className="absolute -left-6 top-5 flex h-5 w-5 items-center justify-center rounded-full bg-background">
-          <span className={`h-3 w-3 rounded-full ${dotClassName}`} />
+    <details className="group rounded-xl border border-border bg-white">
+      <summary className="cursor-pointer list-none p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">{episode.title}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{episode.subtitle}</p>
+          </div>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition group-open:rotate-180" />
         </div>
-        <div className="cursor-pointer rounded-2xl border border-border/80 bg-background/85 p-4 transition hover:bg-background">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={badgeVariant}>{label}</Badge>
-                {sublabel ? <Badge variant="secondary">{sublabel}</Badge> : null}
-                <span className="text-xs text-muted-foreground">{formatDate(timestamp)}</span>
-              </div>
-              <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{preview}</p>
-            </div>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/70 text-muted-foreground transition group-open:rotate-180">
-              <ChevronDown className="h-4 w-4" />
-            </div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <p className={`min-w-0 text-sm ${episode.kind === "investigation" ? "text-amber-700" : "text-slate-600"}`}>{episode.signal}</p>
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge variant={badgeVariant}>{episode.tokenHint}</Badge>
+            <p className="text-xs font-medium text-foreground">{formatTime(episode.timestamp)}</p>
           </div>
         </div>
       </summary>
-      <div className="mt-3 rounded-2xl border border-border/70 bg-muted/20 p-4">{children}</div>
+      <div className="border-t border-border px-4 py-4">
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">{episode.kind.replace("_", " ")}</Badge>
+            <Badge variant="secondary">{formatCompactTokens(episode.estimatedInputTokens)} input</Badge>
+            <Badge variant="secondary">{formatCompactTokens(episode.estimatedOutputTokens)} output</Badge>
+            <Badge variant="secondary">{formatCompactTokens(episode.estimatedTotalTokens)} total</Badge>
+          </div>
+          <div className="space-y-3">
+            {episode.rawEvents.map((event, index) => (
+              <RawEvidence key={`${episode.id}-${index}`} event={event} />
+            ))}
+          </div>
+        </div>
+      </div>
     </details>
   );
 }
 
-function MetricMini({ label, value }: { label: string; value: string }) {
+function RawEvidence({ event }: { event: PromptEvent }) {
+  const meta = getEventMeta(event);
+
   return (
-    <div className="rounded-xl bg-background/80 p-3">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
-      <div className="mt-1 text-sm font-medium">{value}</div>
+    <div className="rounded-lg border border-border bg-slate-50 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <Badge variant={meta.badgeVariant}>{meta.label}</Badge>
+        <p className="text-xs font-medium text-foreground">{formatTime(event.timestamp)}</p>
+      </div>
+      <div className="mt-3">{renderEventContent(event)}</div>
     </div>
   );
 }
 
-function EmptyTimeline({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">{text}</div>;
-}
+function LegacyTimelineRow({ event }: { event: PromptEvent }) {
+  const meta = getEventMeta(event);
 
-function ReadingChip({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/85 px-4 py-3">
-      <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium text-foreground">{value}</span>
-    </div>
+    <details className="group rounded-xl border border-border bg-white">
+      <summary className="cursor-pointer list-none p-4">
+        <div className="flex items-start justify-between gap-3">
+          <p className="min-w-0 text-sm font-semibold text-foreground">{meta.title}</p>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition group-open:rotate-180" />
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <Badge variant={meta.badgeVariant}>{meta.label}</Badge>
+          <p className="text-xs font-medium text-foreground">{formatTime(event.timestamp)}</p>
+        </div>
+        <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">{meta.preview}</p>
+      </summary>
+      <div className="border-t border-border px-4 py-4">{renderEventContent(event)}</div>
+    </details>
   );
 }
 
-function truncate(text: string, maxLength: number) {
-  const compact = text.replace(/\s+/g, " ").trim();
-  if (compact.length <= maxLength) {
-    return compact;
+function renderEventContent(event: PromptEvent) {
+  if (event.kind === "message") {
+    return <p className="text-sm text-muted-foreground">{event.text}</p>;
   }
 
-  return `${compact.slice(0, maxLength - 1)}...`;
+  if (event.kind === "tool_call") {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Wrench className="h-4 w-4" />
+          <span>{event.toolName}</span>
+        </div>
+        <pre className="whitespace-pre-wrap break-all rounded-lg bg-slate-950 p-3 text-xs leading-5 text-slate-50">
+          {event.argumentsText || "No arguments captured"}
+        </pre>
+      </div>
+    );
+  }
+
+  if (event.kind === "tool_output") {
+    return (
+      <pre className="whitespace-pre-wrap break-all rounded-lg bg-slate-950 p-3 text-xs leading-5 text-slate-50">
+        {event.outputText || "No output captured"}
+      </pre>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Badge variant="secondary">{event.inputTokens.toLocaleString()} input</Badge>
+      <Badge variant="secondary">{event.outputTokens.toLocaleString()} output</Badge>
+      <Badge variant="secondary">{event.totalTokens.toLocaleString()} total</Badge>
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">{text}</div>;
 }
 
 function getEventMeta(event: PromptEvent) {
-  switch (event.kind) {
-    case "message":
-      return {
-        label: event.role,
-        dotClassName:
-          event.role === "user"
-            ? "bg-primary"
-            : event.role === "assistant"
-              ? "bg-accent"
-              : "bg-chart-4"
-      };
-    case "tool_call":
-      return {
-        label: "tool call",
-        dotClassName: "bg-chart-3"
-      };
-    case "tool_output":
-      return {
-        label: "tool output",
-        dotClassName: "bg-chart-4"
-      };
-    case "token_count":
-      return {
-        label: "token count",
-        dotClassName: "bg-accent"
-      };
+  if (event.kind === "message") {
+    return {
+      title: truncate(event.text, 72),
+      label: "message",
+      badgeVariant: "secondary" as const,
+      preview: truncate(event.text, 180)
+    };
   }
+
+  if (event.kind === "tool_call") {
+    return {
+      title: `Assistant emits ${event.toolName}`,
+      label: "tool_call",
+      badgeVariant: "outline" as const,
+      preview: truncate(event.argumentsText || "No arguments captured", 180)
+    };
+  }
+
+  if (event.kind === "tool_output") {
+    return {
+      title: `Tool output from ${event.toolName}`,
+      label: "tool_output",
+      badgeVariant: "outline" as const,
+      preview: truncate(event.outputText || "No output captured", 180)
+    };
+  }
+
+  return {
+    title: "Token checkpoint recorded for this session",
+    label: "token_count",
+    badgeVariant: "default" as const,
+    preview: `${event.inputTokens.toLocaleString()} input, ${event.outputTokens.toLocaleString()} output, ${event.totalTokens.toLocaleString()} total`
+  };
+}
+
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(new Date(value));
+}
+
+function renderNumber(value: number | null) {
+  return value == null ? "n/a" : formatCompactTokens(value);
+}
+
+function formatCompactTokens(value: number) {
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `${Math.round(value / 100) / 10}K`;
+  return value.toString();
+}
+
+function truncate(value: string, max: number) {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }

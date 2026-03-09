@@ -113,6 +113,28 @@ type CodexSessionDetail = {
   events: PromptEvent[];
 };
 
+export type PromptEfficiencyEpisode = {
+  id: string;
+  kind: "user_turn" | "investigation" | "implementation";
+  title: string;
+  subtitle: string;
+  timestamp: string;
+  signal: string;
+  tokenHint: string;
+  estimatedInputTokens: number;
+  estimatedOutputTokens: number;
+  estimatedTotalTokens: number;
+  rawEvents: PromptEvent[];
+};
+
+export type PromptEfficiencyOverview = {
+  totalEstimatedTokens: number;
+  wasteSignal: string;
+  likelyCause: string;
+  howToReduceNextTime: string;
+  savingsOpportunities: string[];
+};
+
 export const getProjects = cache((): ProjectRecord[] => {
   const repos = findGitRepos(PROJECTS_ROOT);
   const projectMap = new Map<string, MutableProject>();
@@ -216,8 +238,9 @@ export function getPromptDetail(projectSlug: string, promptId: string) {
     : null;
 
   const codexDetail = prompt.source === "Codex" ? readCodexSessionDetail(prompt.id) : null;
+  const efficiency = codexDetail ? derivePromptEfficiency(codexDetail.events) : null;
 
-  return { project, prompt, commit, codexDetail };
+  return { project, prompt, commit, codexDetail, efficiency };
 }
 
 export function getCommitDetail(projectSlug: string, commitId: string) {
@@ -261,6 +284,157 @@ function scanCodexSessions(projectMap: Map<string, MutableProject>) {
       summary: parsed.summary,
     });
   });
+}
+
+function derivePromptEfficiency(events: PromptEvent[]) {
+  const episodes: PromptEfficiencyEpisode[] = [];
+  let currentWorkEpisode: PromptEfficiencyEpisode | null = null;
+  let checkpointTotals = { input: 0, output: 0, total: 0 };
+
+  const flushCurrentWorkEpisode = () => {
+    if (!currentWorkEpisode) return;
+    finalizeEpisode(currentWorkEpisode);
+    episodes.push(currentWorkEpisode);
+    currentWorkEpisode = null;
+  };
+
+  events.forEach((event) => {
+    if (event.kind === "message" && event.role === "user") {
+      flushCurrentWorkEpisode();
+      episodes.push({
+        id: `${event.timestamp}-user`,
+        kind: "user_turn",
+        title: "User turn",
+        subtitle: summarizeText(event.text),
+        timestamp: event.timestamp,
+        signal: "Decision request or clarification before more work.",
+        tokenHint: "~0 minimal",
+        estimatedInputTokens: 0,
+        estimatedOutputTokens: 0,
+        estimatedTotalTokens: 0,
+        rawEvents: [event],
+      });
+      return;
+    }
+
+    if (!currentWorkEpisode) {
+      currentWorkEpisode = {
+        id: `${event.timestamp}-work`,
+        kind: classifyWorkEpisode(event),
+        title: classifyWorkEpisode(event) === "implementation" ? "Assistant work: implementation" : "Assistant work: investigation",
+        subtitle:
+          classifyWorkEpisode(event) === "implementation"
+            ? "Execution after direction was chosen"
+            : "Diagnosis and repo inspection",
+        timestamp: event.timestamp,
+        signal: "",
+        tokenHint: "~0 minimal",
+        estimatedInputTokens: 0,
+        estimatedOutputTokens: 0,
+        estimatedTotalTokens: 0,
+        rawEvents: [],
+      };
+    }
+
+    currentWorkEpisode.rawEvents.push(event);
+
+    if (event.kind === "token_count") {
+      const deltaInput = Math.max(0, event.inputTokens - checkpointTotals.input);
+      const deltaOutput = Math.max(0, event.outputTokens - checkpointTotals.output);
+      const deltaTotal = Math.max(0, event.totalTokens - checkpointTotals.total);
+
+      currentWorkEpisode.estimatedInputTokens += deltaInput;
+      currentWorkEpisode.estimatedOutputTokens += deltaOutput;
+      currentWorkEpisode.estimatedTotalTokens += deltaTotal;
+
+      checkpointTotals = {
+        input: event.inputTokens,
+        output: event.outputTokens,
+        total: event.totalTokens,
+      };
+    }
+  });
+
+  flushCurrentWorkEpisode();
+
+  const workEpisodes = episodes.filter((episode) => episode.kind !== "user_turn");
+  const mostExpensiveEpisode = workEpisodes.reduce<PromptEfficiencyEpisode | null>((current, episode) => {
+    if (!current) return episode;
+    return episode.estimatedTotalTokens > current.estimatedTotalTokens ? episode : current;
+  }, null);
+
+  const overview: PromptEfficiencyOverview = {
+    totalEstimatedTokens: workEpisodes.reduce((sum, episode) => sum + episode.estimatedTotalTokens, 0),
+    wasteSignal: mostExpensiveEpisode
+      ? mostExpensiveEpisode.kind === "investigation" && mostExpensiveEpisode.estimatedInputTokens >= mostExpensiveEpisode.estimatedOutputTokens
+        ? "High input before edits"
+        : "Heavy work episode"
+      : "No strong waste signal",
+    likelyCause: mostExpensiveEpisode
+      ? mostExpensiveEpisode.kind === "investigation"
+        ? "Repeated inspection and restatement before implementation."
+        : "Implementation work carried both context load and execution."
+      : "Limited detailed event evidence.",
+    howToReduceNextTime: mostExpensiveEpisode
+      ? mostExpensiveEpisode.kind === "investigation"
+        ? "Ask for a short diagnosis first, then approve implementation in a second turn."
+        : "Constrain the implementation target and expected diff before the assistant starts coding."
+      : "Keep the ask narrow and avoid broad exploratory prompts.",
+    savingsOpportunities: [
+      "Stop after the first concrete mismatch diagnosis instead of repeating the same conclusion.",
+      "Name target files early so repo inspection stays narrow.",
+      "Separate exploration from implementation when the first step is a judgment call."
+    ],
+  };
+
+  return { overview, episodes: episodes.slice().sort((a, b) => b.timestamp.localeCompare(a.timestamp)) };
+}
+
+function classifyWorkEpisode(event: PromptEvent) {
+  if (event.kind === "tool_call") {
+    const tool = event.toolName.toLowerCase();
+    if (/(write|edit|patch|apply|save|replace|create|delete|move|set)/.test(tool)) {
+      return "implementation" as const;
+    }
+  }
+
+  return "investigation" as const;
+}
+
+function finalizeEpisode(episode: PromptEfficiencyEpisode) {
+  if (episode.kind === "user_turn") {
+    return;
+  }
+
+  const mostlyInput = episode.estimatedInputTokens > episode.estimatedOutputTokens * 1.6;
+  const hintPrefix = episode.estimatedTotalTokens > 0 ? formatCompactTokenCount(episode.estimatedTotalTokens) : "~0";
+
+  episode.tokenHint =
+    episode.estimatedTotalTokens === 0
+      ? "~0 minimal"
+      : mostlyInput
+        ? `${hintPrefix} mostly input`
+        : `${hintPrefix} mixed`;
+
+  episode.signal =
+    episode.kind === "investigation"
+      ? mostlyInput
+        ? "Low efficiency: heavy context load before a small structural conclusion."
+        : "Useful diagnosis, but still mostly exploratory token spend."
+      : mostlyInput
+        ? "Implementation moved forward, but carried extra context overhead."
+        : "Better use of tokens: work moved toward an actual implementation."
+}
+
+function summarizeText(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > 64 ? `${normalized.slice(0, 63)}…` : normalized;
+}
+
+function formatCompactTokenCount(value: number) {
+  if (value >= 1_000_000) return `${Math.round((value / 1_000_000) * 10) / 10}M`;
+  if (value >= 1_000) return `${Math.round(value / 1000)}K`;
+  return String(value);
 }
 
 function scanCursorWorkspaces(projectMap: Map<string, MutableProject>) {
