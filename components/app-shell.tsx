@@ -11,6 +11,7 @@ export function AppShell({
   title,
   eyebrow,
   breadcrumbs,
+  subtitle,
   className,
   section = "dashboard",
   repoCount
@@ -19,6 +20,7 @@ export function AppShell({
   title: string;
   eyebrow?: string;
   breadcrumbs?: React.ReactNode;
+  subtitle?: React.ReactNode;
   className?: string;
   section?: AppSection;
   repoCount?: number;
@@ -57,6 +59,7 @@ export function AppShell({
                 ) : null}
                 <div>
                   <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">{title}</h1>
+                  {subtitle ? <div className="mt-2 max-w-3xl text-sm text-muted-foreground md:text-base">{subtitle}</div> : null}
                 </div>
               </div>
             </header>

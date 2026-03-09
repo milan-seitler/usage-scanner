@@ -37,7 +37,7 @@ export default async function PromptDetailPage({
   const view = normalizeTimelineView(resolvedSearchParams?.view);
   const promptGroups = codexDetail ? groupPromptEpisodes(codexDetail.events) : [];
   const promptCostChartData = buildPromptCostChartData(promptGroups, pricingProfile);
-  const promptHeaderTitle = promptGroups[0]?.userMessage ?? prompt.title;
+  const promptHeaderTitle = truncatePageTitle(promptGroups[0]?.userMessage ?? prompt.title);
 
   return (
     <AppShell
@@ -778,4 +778,9 @@ function isSessionBootstrapMessage(text: string) {
 function truncatePromptPreview(text: string) {
   const normalized = text.replace(/\s+/g, " ").trim();
   return normalized.length > 72 ? `${normalized.slice(0, 72)}...` : normalized;
+}
+
+function truncatePageTitle(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > 120 ? `${normalized.slice(0, 120)}...` : normalized;
 }

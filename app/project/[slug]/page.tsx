@@ -1,16 +1,17 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
-import { TokenBarChart } from "@/components/dashboard-token-chart";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { ProjectPromptSort } from "@/components/project-prompt-sort";
+import { ProjectTokenPanel } from "@/components/project-token-panel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatUsd } from "@/lib/pricing";
 import { getProject, getProjects, getPromptDetail } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
-type PromptSortKey = "date-desc" | "date-asc" | "tokens-desc" | "tokens-asc";
+type PromptSortKey = "date-desc" | "date-asc" | "tokens-desc" | "tokens-asc" | "price-desc" | "price-asc";
 
 export default async function ProjectPage({
   params,
@@ -30,79 +31,77 @@ export default async function ProjectPage({
 
   const sort = normalizePromptSort(resolvedSearchParams?.sort);
   const tokenTotal = project.prompts.reduce((sum, prompt) => sum + (prompt.totalTokens ?? 0), 0);
-  const bestSource = project.scannerSources.some((source) => source.toLowerCase().includes("codex")) ? "Codex" : "Cursor";
-  const latestPrompt = project.prompts[0];
+  const totalInputTokens = project.prompts.reduce((sum, prompt) => sum + (prompt.inputTokens ?? 0), 0);
+  const totalCachedInputTokens = project.prompts.reduce((sum, prompt) => sum + (prompt.cachedInputTokens ?? 0), 0);
+  const totalOutputTokens = project.prompts.reduce((sum, prompt) => sum + (prompt.outputTokens ?? 0), 0);
   const tokenChartData = buildDailyTokenChart(project.prompts);
+  const totalSpend = project.prompts.reduce((sum, prompt) => sum + (prompt.costUsd ?? 0), 0);
   const promptRows = project.prompts.map((prompt) => {
     const detail = getPromptDetail(project.slug, prompt.id);
     const lastEventTs = detail?.codexDetail?.events.at(-1)?.timestamp;
+    const firstPromptMessage = detail?.codexDetail ? getFirstActualPromptTitle(detail.codexDetail.events) : null;
 
     return {
       id: prompt.id,
-      title: prompt.title,
-      source: shortSource(prompt.source),
+      title: firstPromptMessage ?? prompt.title,
       startedAt: prompt.startedAt,
       started: formatAbsoluteDate(prompt.startedAt),
       lastEdit: lastEventTs ? formatRelativeTime(lastEventTs) : "n/a",
+      priceValue: prompt.costUsd ?? -1,
+      price: formatUsd(prompt.costUsd),
+      inputTokens: prompt.inputTokens,
+      cachedInputTokens: prompt.cachedInputTokens,
+      outputTokens: prompt.outputTokens,
       tokensValue: prompt.totalTokens ?? -1,
       tokens: prompt.totalTokens != null ? formatCompactTokens(prompt.totalTokens) : "n/a"
     };
   }).sort((a, b) => comparePromptRows(a, b, sort));
 
   return (
-    <AppShell eyebrow="Project Drill-down" title={project.name} section="project" repoCount={repoCount}>
-      <section className="flex flex-col gap-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">{project.repoPath}</p>
-            <div className="flex flex-wrap gap-2">
-              {project.scannerSources.map((source) => (
-                <Badge key={source} variant="outline">
-                  {sourceLabel(source)}
-                </Badge>
-              ))}
-            </div>
-          </div>
-          <Button href="/" variant="outline">
-            Back to dashboard
-          </Button>
-        </div>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <PlainStatCard label="Known tokens" value={formatCompactTokens(tokenTotal)} meta="codex" />
-        <PlainStatCard label="Prompt sessions" value={String(project.prompts.length)} meta="all" />
-        <PlainStatCard label="Latest prompt" value={latestPrompt ? formatAbsoluteDate(latestPrompt.startedAt) : "n/a"} meta="activity" />
-        <PlainStatCard label="Best source" value={bestSource} meta="rich" />
+    <AppShell
+      title={project.name}
+      subtitle={project.repoPath}
+      section="project"
+      repoCount={repoCount}
+      breadcrumbs={
+        <nav className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Link className="transition hover:text-foreground" href="/">
+            Dashboard
+          </Link>
+          <span>/</span>
+          <span className="text-foreground">{project.name}</span>
+        </nav>
+      }
+    >
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <PlainStatCard
+          label="Known tokens"
+          value={
+            <TokenSummaryValue
+              totalTokens={tokenTotal}
+              inputTokens={totalInputTokens}
+              cachedInputTokens={totalCachedInputTokens}
+              outputTokens={totalOutputTokens}
+            />
+          }
+        />
+        <PlainStatCard label="Price" value={formatUsd(totalSpend)} />
+        <PlainStatCard label="Prompt sessions" value={String(project.prompts.length)} />
       </section>
 
       <section className="grid gap-6">
-        <Card className="border-border bg-white shadow-none">
-          <CardHeader className="pb-4">
-            <CardTitle>Token consumption</CardTitle>
-            <CardDescription>Known input and output tokens across this project&apos;s recovered prompt sessions.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {tokenChartData.some((point) => point.inputTokens > 0 || point.outputTokens > 0) ? (
-              <TokenBarChart data={tokenChartData} className="h-[200px]" />
-            ) : (
-              <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                Token totals are not available for the recovered sessions in this project.
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {tokenChartData.some((point) => point.inputTokens > 0 || point.outputTokens > 0) ? <ProjectTokenPanel data={tokenChartData} /> : (
+          <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+            Token totals are not available for the recovered sessions in this project.
+          </div>
+        )}
 
         <Card className="border-border bg-white shadow-none">
-          <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <CardTitle>Prompt sessions</CardTitle>
-              <CardDescription>Recovered sessions from local logs and IDE history for this repository.</CardDescription>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <SortButton slug={project.slug} currentSort={sort} family="date" targetSort={nextSort(sort, "date")} label={sortLabel(sort, "date")} />
-              <SortButton slug={project.slug} currentSort={sort} family="tokens" targetSort={nextSort(sort, "tokens")} label={sortLabel(sort, "tokens")} />
-            </div>
+            <ProjectPromptSort initialSort={sort} />
           </CardHeader>
           <CardContent className="pt-0">
             <div className="space-y-4">
@@ -110,29 +109,32 @@ export default async function ProjectPage({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Prompt</TableHead>
-                    <TableHead className="w-[150px]">Source</TableHead>
                     <TableHead className="w-[140px]">Date</TableHead>
                     <TableHead className="w-[120px]">Last edit</TableHead>
-                    <TableHead className="w-[120px]">Tokens consumed</TableHead>
-                    <TableHead className="w-[120px] text-right">Detail</TableHead>
+                    <TableHead className="w-[120px]">Price</TableHead>
+                    <TableHead className="w-[120px]">Tokens</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {promptRows.map((row) => (
-                    <TableRow key={row.id}>
+                    <TableRow key={row.id} className="cursor-pointer">
                       <TableCell className="max-w-[34rem]">
-                        <p className="line-clamp-2 text-sm font-medium text-foreground">{row.title}</p>
+                        <Link className="block -m-4 p-4" href={`/project/${project.slug}/prompt/${row.id}`}>
+                          <p className="line-clamp-2 text-sm font-medium text-foreground">{row.title}</p>
+                        </Link>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{row.source}</Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{row.started}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{row.lastEdit}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{row.tokens}</TableCell>
-                      <TableCell className="text-right">
-                        <Button href={`/project/${project.slug}/prompt/${row.id}`} variant="outline" size="sm">
-                          Open
-                        </Button>
+                      <TableCell className="text-sm text-muted-foreground"><Link className="block -m-4 p-4" href={`/project/${project.slug}/prompt/${row.id}`}>{row.started}</Link></TableCell>
+                      <TableCell className="text-sm text-muted-foreground"><Link className="block -m-4 p-4" href={`/project/${project.slug}/prompt/${row.id}`}>{row.lastEdit}</Link></TableCell>
+                      <TableCell className="text-sm text-muted-foreground"><Link className="block -m-4 p-4" href={`/project/${project.slug}/prompt/${row.id}`}>{row.price}</Link></TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <Link className="block -m-4 p-4" href={`/project/${project.slug}/prompt/${row.id}`}>
+                          <TokenValue
+                            total={row.tokens}
+                            inputTokens={row.inputTokens}
+                            cachedInputTokens={row.cachedInputTokens}
+                            outputTokens={row.outputTokens}
+                          />
+                        </Link>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -146,43 +148,62 @@ export default async function ProjectPage({
   );
 }
 
-function SortButton({
-  slug,
-  currentSort,
-  family,
-  targetSort,
-  label
-}: {
-  slug: string;
-  currentSort: PromptSortKey;
-  family: "date" | "tokens";
-  targetSort: PromptSortKey;
-  label: string;
-}) {
-  const active = currentSort.startsWith(family);
-
-  return (
-    <Button
-      href={`/project/${slug}?sort=${targetSort}`}
-      variant={active ? "default" : "outline"}
-      size="sm"
-    >
-      {label}
-    </Button>
-  );
-}
-
-function PlainStatCard({ label, value, meta }: { label: string; value: string; meta: string }) {
+function PlainStatCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <Card className="border-border bg-white shadow-none">
-      <CardHeader className="gap-1 pb-2">
+      <CardHeader className="gap-1 pb-5">
         <CardDescription className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</CardDescription>
         <CardTitle className="text-2xl">{value}</CardTitle>
       </CardHeader>
-      <CardContent className="pt-0">
-        <p className="text-xs text-muted-foreground">{meta}</p>
-      </CardContent>
     </Card>
+  );
+}
+
+function TokenSummaryValue({
+  totalTokens,
+  inputTokens,
+  cachedInputTokens,
+  outputTokens
+}: {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+}) {
+  return (
+    <span className="group relative inline-flex">
+      <span className="border-b border-dashed border-slate-400/80 leading-none">{formatCompactTokens(totalTokens)}</span>
+      <span className="pointer-events-none absolute left-0 top-full z-20 mt-3 hidden min-w-[220px] rounded-lg border border-border bg-white p-3 text-left text-sm font-medium text-foreground shadow-xl group-hover:block">
+        <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Token breakdown</span>
+        <span className="mt-2 block text-sm text-foreground">{formatCompactTokens(inputTokens)} input</span>
+        <span className="mt-1 block text-sm text-foreground">{formatCompactTokens(cachedInputTokens)} cached</span>
+        <span className="mt-1 block text-sm text-foreground">{formatCompactTokens(outputTokens)} output</span>
+      </span>
+    </span>
+  );
+}
+
+function TokenValue({
+  total,
+  inputTokens,
+  cachedInputTokens,
+  outputTokens
+}: {
+  total: string;
+  inputTokens: number | null;
+  cachedInputTokens: number | null;
+  outputTokens: number | null;
+}) {
+  return (
+    <span className="group relative inline-flex">
+      <span className="border-b border-dashed border-slate-400/80 leading-none">{total}</span>
+      <span className="pointer-events-none absolute left-0 top-full z-20 mt-3 hidden min-w-[220px] rounded-lg border border-border bg-white p-3 text-left text-sm font-medium text-foreground shadow-xl group-hover:block">
+        <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Token breakdown</span>
+        <span className="mt-2 block text-sm text-foreground">{renderTokenNumber(inputTokens)} input</span>
+        <span className="mt-1 block text-sm text-foreground">{renderTokenNumber(cachedInputTokens)} cached</span>
+        <span className="mt-1 block text-sm text-foreground">{renderTokenNumber(outputTokens)} output</span>
+      </span>
+    </span>
   );
 }
 
@@ -243,18 +264,12 @@ function formatCompactTokens(value: number) {
   return value.toString();
 }
 
-function shortSource(source: string) {
-  return source === "Codex" ? "Codex" : "Cursor";
-}
-
-function sourceLabel(source: string) {
-  if (source.toLowerCase().includes("codex")) return "Codex sessions";
-  if (source.toLowerCase().includes("cursor")) return "Cursor metadata";
-  return "Git correlation";
+function renderTokenNumber(value: number | null) {
+  return value == null ? "n/a" : formatCompactTokens(value);
 }
 
 function normalizePromptSort(value?: string): PromptSortKey {
-  if (value === "date-asc" || value === "tokens-desc" || value === "tokens-asc") {
+  if (value === "date-asc" || value === "tokens-desc" || value === "tokens-asc" || value === "price-desc" || value === "price-asc") {
     return value;
   }
 
@@ -262,8 +277,8 @@ function normalizePromptSort(value?: string): PromptSortKey {
 }
 
 function comparePromptRows(
-  a: { startedAt: string; tokensValue: number },
-  b: { startedAt: string; tokensValue: number },
+  a: { startedAt: string; tokensValue: number; priceValue: number },
+  b: { startedAt: string; tokensValue: number; priceValue: number },
   sort: PromptSortKey
 ) {
   if (sort === "date-asc") {
@@ -278,26 +293,15 @@ function comparePromptRows(
     return a.tokensValue - b.tokensValue || b.startedAt.localeCompare(a.startedAt);
   }
 
-  return b.startedAt.localeCompare(a.startedAt);
-}
-
-function nextSort(currentSort: PromptSortKey, family: "date" | "tokens"): PromptSortKey {
-  if (family === "date") {
-    return currentSort === "date-desc" ? "date-asc" : "date-desc";
+  if (sort === "price-desc") {
+    return b.priceValue - a.priceValue || b.startedAt.localeCompare(a.startedAt);
   }
 
-  return currentSort === "tokens-desc" ? "tokens-asc" : "tokens-desc";
-}
+  if (sort === "price-asc") {
+    return a.priceValue - b.priceValue || b.startedAt.localeCompare(a.startedAt);
+  }
 
-function sortLabel(currentSort: PromptSortKey, family: "date" | "tokens") {
-  const active = currentSort.startsWith(family);
-  const direction = active ? activeSortDirection(currentSort) : "desc";
-  const title = family === "date" ? "Date" : "Tokens";
-  return `${title} ${direction === "asc" ? "↑" : "↓"}`;
-}
-
-function activeSortDirection(sort: PromptSortKey) {
-  return sort.endsWith("asc") ? "asc" : "desc";
+  return b.startedAt.localeCompare(a.startedAt);
 }
 
 function fillDailyChartGaps(bucket: Map<string, { date: string; isoDate: string; inputTokens: number; outputTokens: number }>) {
@@ -324,4 +328,19 @@ function fillDailyChartGaps(bucket: Map<string, { date: string; isoDate: string;
   }
 
   return days;
+}
+
+function getFirstActualPromptTitle(events: Array<{ kind: string; role?: string; text?: string }>) {
+  const match = events.find((event) => event.kind === "message" && event.role === "user" && typeof event.text === "string" && !isBootstrapPrompt(event.text));
+  return match?.text ? truncatePromptTitle(match.text) : null;
+}
+
+function isBootstrapPrompt(text: string) {
+  const normalized = text.trim();
+  return normalized.startsWith("# AGENTS.md instructions") || normalized.startsWith("<environment_context>") || normalized.includes("\n<environment_context>");
+}
+
+function truncatePromptTitle(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  return normalized.length > 100 ? `${normalized.slice(0, 100)}...` : normalized;
 }

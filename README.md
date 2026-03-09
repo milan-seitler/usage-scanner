@@ -22,11 +22,43 @@ The current app reads from:
 - Project drill-down with prompt and commit correlation
 - Prompt detail page with Codex event timelines
 - Commit detail page showing the prompt sessions linked to a commit
+- Prompt detail grouped view that rolls up one user prompt into a single execution episode
+- Project and dashboard tables with token breakdown tooltips, pricing columns, and direct row navigation
+- Token usage charts with simple time-range controls
 
 Notes:
 
 - Codex currently provides the richest local detail, including transcript events, tool calls, tool outputs, and token checkpoints.
 - Cursor currently contributes prompt history on this machine, but not equivalent token/event depth.
+
+## Pricing
+
+Prompt and session pricing is estimated locally from recovered usage snapshots.
+
+Current pricing coverage includes:
+
+- `GPT-5.4`
+- `GPT-5.3-Codex`
+- `GPT-5.2`
+- `GPT-5.2-Codex`
+- `GPT-5.1-Codex`
+- `GPT-5.1-Codex-Max`
+- `GPT-5.1-Codex-Mini`
+- generic `Codex` fallback
+
+Pricing is calculated as:
+
+```text
+uncached_input * input_rate
++ cached_input * cached_input_rate
++ output * output_rate
+```
+
+Important:
+
+- `cached input` is a subset of `input`, not an additional bucket on top of input
+- `session total` is derived from `input + output`
+- cost estimates only use profiles that have been mapped locally in `lib/pricing.ts`
 
 ## Run locally
 
@@ -69,3 +101,10 @@ Open [http://localhost:3000](http://localhost:3000).
 - This is a local retrospective scanner, not a hosted analytics product.
 - Data quality depends on what each source leaves behind on disk.
 - Next.js dev mode on this machine has shown occasional stale-cache/runtime issues; `npm run build && npm start` is the most reliable path for verification.
+
+If the dev server starts returning a white screen or missing chunk/module errors after a refactor, the usual recovery path is:
+
+```bash
+rm -rf .next
+npm run dev
+```

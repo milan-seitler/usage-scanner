@@ -3,7 +3,6 @@
 import * as React from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
-import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 
 type ChartPoint = {
@@ -28,12 +27,13 @@ export function DashboardTokenChart({ data }: { data: ChartPoint[] }) {
 
 export function TokenBarChart({
   data,
-  className = "h-[220px]"
+  className = "h-[220px]",
+  range = "30d"
 }: {
   data: ChartPoint[];
   className?: string;
+  range?: RangeKey;
 }) {
-  const [range, setRange] = React.useState<RangeKey>("30d");
   const normalizedData = React.useMemo(
     () =>
       data.map((point) => ({
@@ -46,44 +46,29 @@ export function TokenBarChart({
   const visibleData = React.useMemo(() => filterChartRange(normalizedData, range), [normalizedData, range]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap justify-end gap-2">
-        {(["7d", "30d", "90d", "all"] as const).map((option) => (
-          <Button
-            key={option}
-            type="button"
-            variant={range === option ? "default" : "outline"}
-            size="sm"
-            onClick={() => setRange(option)}
-          >
-            {option === "all" ? "All" : option.toUpperCase()}
-          </Button>
-        ))}
-      </div>
-      <ChartContainer config={chartConfig} className={className}>
-        <BarChart data={visibleData} margin={{ left: 0, right: 0, top: 8, bottom: 0 }} barCategoryGap="12%">
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(107,114,128,0.18)" vertical={false} />
-          <XAxis
-            axisLine={false}
-            dataKey="date"
-            tickLine={false}
-            tickMargin={10}
-            tick={{ fontSize: 11, fill: "rgba(107,114,128,0.9)" }}
-          />
-          <YAxis axisLine={false} tickLine={false} tickMargin={10} tick={{ fontSize: 11, fill: "rgba(107,114,128,0.9)" }} />
-          <ChartTooltip
-            cursor={false}
-            content={<ChartTooltipContent labelFormatter={formatTooltipDate} formatter={(value: number) => [`${value.toLocaleString()} tokens`]} />}
-          />
-          <Bar
-            dataKey="totalTokens"
-            fill="hsl(var(--chart-1))"
-            radius={[4, 4, 0, 0]}
-            minPointSize={6}
-          />
-        </BarChart>
-      </ChartContainer>
-    </div>
+    <ChartContainer config={chartConfig} className={className}>
+      <BarChart data={visibleData} margin={{ left: 0, right: 0, top: 8, bottom: 0 }} barCategoryGap="12%">
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(107,114,128,0.18)" vertical={false} />
+        <XAxis
+          axisLine={false}
+          dataKey="date"
+          tickLine={false}
+          tickMargin={10}
+          tick={{ fontSize: 11, fill: "rgba(107,114,128,0.9)" }}
+        />
+        <YAxis axisLine={false} tickLine={false} tickMargin={10} tick={{ fontSize: 11, fill: "rgba(107,114,128,0.9)" }} />
+        <ChartTooltip
+          cursor={false}
+          content={<ChartTooltipContent labelFormatter={formatTooltipDate} formatter={(value: number) => [`${value.toLocaleString()} tokens`]} />}
+        />
+        <Bar
+          dataKey="totalTokens"
+          fill="hsl(var(--chart-1))"
+          radius={[4, 4, 0, 0]}
+          minPointSize={6}
+        />
+      </BarChart>
+    </ChartContainer>
   );
 }
 
