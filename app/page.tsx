@@ -56,6 +56,19 @@ export default async function HomePage({
   );
   return (
     <AppShell title="Dashboard" section="dashboard" repoCount={projects.length}>
+      {projects.length === 0 ? (
+        <section>
+          <Card className="border-border bg-card shadow-none">
+            <CardHeader>
+              <CardTitle>No local scan data found yet</CardTitle>
+              <CardDescription>
+                Check <code>.env.local</code>, make sure <code>git</code> and <code>sqlite3</code> are installed, and run the app on a machine that already has local Codex, Cursor, or Git activity to scan.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </section>
+      ) : null}
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Cost" value={formatUsd(totals.price)} />
         <MetricCard

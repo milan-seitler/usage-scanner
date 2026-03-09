@@ -2,6 +2,8 @@
 
 `repo-scanner` is a local dashboard for reconstructing AI assistant usage by project, currently focused on Codex workflows.
 
+It is designed for localhost use against sensitive machine-local traces. By default the app now blocks non-local requests unless you explicitly opt out with `REPO_SCANNER_ALLOW_REMOTE=true`.
+
 It scans local machine traces, groups them by repository, and lets you drill down from:
 
 1. project spend and activity
@@ -46,6 +48,21 @@ uncached_input * input_rate
 + output * output_rate
 ```
 
+## Prerequisites
+
+- Node.js 20+ and npm
+- `git` on your `PATH`
+- `sqlite3` on your `PATH` for Cursor workspace ingestion
+- A machine that already has local Git repos plus Codex and/or Cursor traces to scan
+
+Tested path defaults are macOS-oriented:
+
+- `~/Developer/Projects`
+- `~/.codex`
+- `~/Library/Application Support/Cursor/User/workspaceStorage`
+
+If your machine uses different roots, override them in `.env.local`.
+
 ## Run locally
 
 1. Copy the example environment file:
@@ -54,7 +71,7 @@ uncached_input * input_rate
 cp .env.example .env.local
 ```
 
-2. Edit `.env.local` and set the required local paths:
+2. Edit `.env.local` if you need to override the default local scan roots:
 
 ```bash
 REPO_SCANNER_PROJECTS_ROOT=/absolute/path/to/your/repos
@@ -62,7 +79,15 @@ REPO_SCANNER_CODEX_ROOT=/absolute/path/to/your/.codex
 REPO_SCANNER_CURSOR_WORKSPACES=/absolute/path/to/Cursor/User/workspaceStorage
 ```
 
-3. If you want to try the experimental `Cursor Stats` route, also set:
+If you keep the default macOS-style folders, you can leave those three variables unset.
+
+3. Keep the app local-only unless you have your own auth boundary in front of it:
+
+```bash
+REPO_SCANNER_ALLOW_REMOTE=false
+```
+
+4. If you want to try the experimental `Cursor Stats` route, also set:
 
 ```bash
 CURSOR_ADMIN_API_KEY=...
@@ -75,14 +100,15 @@ CURSOR_STATS_LOOKBACK_DAYS=30
 - this route is currently experimental
 - it is intentionally not linked from the main UI
 - it should be treated as incomplete until it has dedicated validation against real team data
+- the UI masks user emails, but the underlying data should still be treated as sensitive
 
-4. Install dependencies:
+5. Install dependencies:
 
 ```bash
 npm install
 ```
 
-5. Start the production server:
+6. Start the production server:
 
 ```bash
 npm run build
@@ -96,6 +122,35 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+## Verification
+
+Run the two non-interactive checks before publishing or opening a PR:
+
+```bash
+npm run lint
+npm run build
+```
+
+## First run
+
+If your configured roots do not contain any matching traces yet, the dashboard will load with an empty-state message instead of project rows.
+
+That usually means one of these is true:
+
+- `.env.local` points at the wrong roots
+- the machine does not have local Codex/Cursor traces yet
+- `git` or `sqlite3` is missing from `PATH`
+- the repos you want to scan live outside `REPO_SCANNER_PROJECTS_ROOT`
+
+## Scan Scope And Limits
+
+- Repository discovery only walks one and two directory levels under `REPO_SCANNER_PROJECTS_ROOT`
+- Git history is limited to the last 90 days and at most 40 commits per repo
+- Codex ingestion keeps at most 250 recovered sessions per repo
+- Cursor ingestion keeps at most 120 recovered generations per repo
+
+These limits keep the dashboard responsive, but they also mean missing older data is not always a bug.
 
 ## Tech stack
 
@@ -115,4 +170,6 @@ Open [http://localhost:3000](http://localhost:3000).
 - This is a local retrospective scanner, not a hosted analytics product.
 - Data quality depends on what each source leaves behind on disk.
 - The app expects machine-specific local paths; configure them through environment variables instead of editing source.
+- Prompt detail pages can surface sensitive transcript and tool-output content from local Codex logs.
+- Do not expose this app to a network without adding your own authentication and transport controls first.
 - None of your local path values or API keys should be committed.

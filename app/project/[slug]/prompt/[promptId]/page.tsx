@@ -283,55 +283,6 @@ function PromptUsageCard({
   );
 }
 
-function EfficiencyOverview({
-  overview
-}: {
-  overview: {
-    totalEstimatedTokens: number;
-    wasteSignal: string;
-    likelyCause: string;
-    howToReduceNextTime: string;
-    savingsOpportunities: string[];
-  };
-}) {
-  return (
-    <div className="space-y-3 rounded-xl border border-border bg-muted p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-foreground">Token efficiency</p>
-          <p className="text-xs text-muted-foreground">Estimated from grouped session episodes and nearby token checkpoints.</p>
-        </div>
-        <Badge variant="secondary">{formatCompactTokens(overview.totalEstimatedTokens)} total</Badge>
-      </div>
-      <div className="grid gap-3 md:grid-cols-[220px_220px_1fr]">
-        <OverviewStat title="Likely waste signal" value={overview.wasteSignal} text="Estimated source of avoidable token spend." />
-        <OverviewStat title="Estimated cause" value={overview.likelyCause} text="Best-effort diagnosis from grouped episodes." />
-        <OverviewStat title="Suggested next change" value={overview.howToReduceNextTime} text="Recommended prompt/process adjustment." />
-      </div>
-      <div className="rounded-lg border border-border bg-card p-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Savings opportunities</p>
-        <div className="mt-2 space-y-1.5 text-sm text-muted-foreground">
-          {overview.savingsOpportunities.map((item, index) => (
-            <p key={item}>
-              {index + 1}. {item}
-            </p>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OverviewStat({ title, value, text }: { title: string; value: string; text: string }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-3">
-      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
-      <p className="mt-2 text-sm font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{text}</p>
-    </div>
-  );
-}
-
 function TimelineItemRow({ item }: { item: PromptTimelineItem }) {
   if (item.kind === "token_checkpoint") {
     return <TokenCheckpointRow item={item} />;
